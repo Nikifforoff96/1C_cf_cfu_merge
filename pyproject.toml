@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cfmerge"
+version = "0.1.0"
+description = "Flatten one 1C configuration extension dump into a plain 1C configuration dump"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "cfmerge contributors" }]
+keywords = ["1c", "1c-enterprise", "configuration", "extension", "merge"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Build Tools",
+]
+
+[project.scripts]
+cfmerge = "cfmerge.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/example/cfmerge"
+Issues = "https://github.com/example/cfmerge/issues"
+
+[tool.setuptools]
+packages = ["cfmerge"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

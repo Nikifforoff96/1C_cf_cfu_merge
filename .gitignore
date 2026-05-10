@@ -1,0 +1,33 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local agent/project instructions and private runtime configuration
+[Aa][Gg][Ee][Nn][Tt][Ss].md
+[Aa][Gg][Ee][Nn][Tt][Ss].example.md
+.co?ex/
+.v8-project.json
+
+# Private/local validation data
+1?_Test?Base/
+full?example/
+small?example/
+Merge?cf?cfu.zip
+
+# Generated merge outputs and 1C build artifacts
+**/merged_cf/
+**/merge-report.json
+**/merge-report.txt
+**/*.cf
+**/*.cfe
+
+# Temporary backups/debug outputs
+*.bak/
+*.tmp

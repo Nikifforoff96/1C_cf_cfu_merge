@@ -1,0 +1,88 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:app="http://v8.1c.ru/8.2/managed-application/core" xmlns:cfg="http://v8.1c.ru/8.1/data/enterprise/current-config" xmlns:cmi="http://v8.1c.ru/8.2/managed-application/cmi" xmlns:ent="http://v8.1c.ru/8.1/data/enterprise" xmlns:lf="http://v8.1c.ru/8.2/managed-application/logform" xmlns:style="http://v8.1c.ru/8.1/data/ui/style" xmlns:sys="http://v8.1c.ru/8.1/data/ui/fonts/system" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:v8ui="http://v8.1c.ru/8.1/data/ui" xmlns:web="http://v8.1c.ru/8.1/data/ui/colors/web" xmlns:win="http://v8.1c.ru/8.1/data/ui/colors/windows" xmlns:xen="http://v8.1c.ru/8.3/xcf/enums" xmlns:xpr="http://v8.1c.ru/8.3/xcf/predef" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="2.20">
+	<Catalog uuid="e5122bbf-e1ef-4169-8515-d96c79baaf8e">
+		<InternalInfo>
+			<xr:GeneratedType name="CatalogObject.ТестСправочник" category="Object">
+				<xr:TypeId>7a7daf20-c552-4424-bd81-4065a93f1fcb</xr:TypeId>
+				<xr:ValueId>c498b709-6c19-4933-84d4-f27c612b9661</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="CatalogRef.ТестСправочник" category="Ref">
+				<xr:TypeId>eab0bd98-2dcf-4526-b7d5-77fedf16c70a</xr:TypeId>
+				<xr:ValueId>36769d7f-f887-460f-a737-6b3f965a65bd</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="CatalogSelection.ТестСправочник" category="Selection">
+				<xr:TypeId>1d5a4f82-ef51-4d94-a5f4-843d234378e3</xr:TypeId>
+				<xr:ValueId>b38c6620-bb67-4f6b-8eb2-93dafa4add80</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="CatalogList.ТестСправочник" category="List">
+				<xr:TypeId>489bd6cd-eb18-4b4e-97be-4dbd8cf0379f</xr:TypeId>
+				<xr:ValueId>8115201f-1f5d-4a22-aaea-cad5d7b38623</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="CatalogManager.ТестСправочник" category="Manager">
+				<xr:TypeId>2678b5fc-f450-4989-87f1-f171e8df99dc</xr:TypeId>
+				<xr:ValueId>c6b5728f-8c3d-41c2-bb00-a59e97e55f1c</xr:ValueId>
+			</xr:GeneratedType>
+		</InternalInfo>
+		<Properties>
+			<ObjectBelonging>Adopted</ObjectBelonging>
+			<Name>ТестСправочник</Name>
+			<Comment/>
+			<ExtendedConfigurationObject>77815077-b6ba-4abc-8ae3-f85356753468</ExtendedConfigurationObject>
+			<CodeLength>9</CodeLength>
+			<DescriptionLength>25</DescriptionLength>
+			<CodeType>String</CodeType>
+			<CodeAllowedLength>Variable</CodeAllowedLength>
+		</Properties>
+		<ChildObjects>
+			<Attribute uuid="adf0b8bc-8efd-46e7-a479-3038daac52cf">
+				<InternalInfo/>
+				<Properties>
+					<ObjectBelonging>Adopted</ObjectBelonging>
+					<Name>Реквизит1</Name>
+					<Comment/>
+					<ExtendedConfigurationObject>49e69e55-3b10-449e-a479-f7db5d708e0d</ExtendedConfigurationObject>
+					<Type>
+						<v8:Type>xs:string</v8:Type>
+						<v8:StringQualifiers>
+							<v8:Length>10</v8:Length>
+							<v8:AllowedLength>Variable</v8:AllowedLength>
+						</v8:StringQualifiers>
+					</Type>
+				</Properties>
+			</Attribute>
+			<Attribute uuid="14fa6952-d7aa-4bfc-ba48-3851e3b36c75">
+				<InternalInfo/>
+				<Properties>
+					<ObjectBelonging>Adopted</ObjectBelonging>
+					<Name>Реквизит2</Name>
+					<Comment/>
+					<ExtendedConfigurationObject>0198b649-4700-4fda-8b19-d2016dbb204e</ExtendedConfigurationObject>
+					<Type>
+						<v8:Type>xs:string</v8:Type>
+						<v8:StringQualifiers>
+							<v8:Length>10</v8:Length>
+							<v8:AllowedLength>Variable</v8:AllowedLength>
+						</v8:StringQualifiers>
+					</Type>
+				</Properties>
+			</Attribute>
+			<Attribute uuid="9c67c7be-8741-4194-ad39-e99d6fb00ae9">
+				<InternalInfo/>
+				<Properties>
+					<ObjectBelonging>Adopted</ObjectBelonging>
+					<Name>Реквизит3</Name>
+					<Comment/>
+					<ExtendedConfigurationObject>f9451d05-f454-41fd-80a8-65bb4d24c2be</ExtendedConfigurationObject>
+					<Type>
+						<v8:Type>xs:string</v8:Type>
+						<v8:StringQualifiers>
+							<v8:Length>10</v8:Length>
+							<v8:AllowedLength>Variable</v8:AllowedLength>
+						</v8:StringQualifiers>
+					</Type>
+				</Properties>
+			</Attribute>
+			<Form>ФормаЭлемента</Form>
+		</ChildObjects>
+	</Catalog>
+</MetaDataObject>

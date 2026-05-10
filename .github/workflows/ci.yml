@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package
+        run: python -m pip install -e .
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Check CLI
+        run: python -m cfmerge --help
+
+      - name: Check generated artifacts
+        shell: bash
+        run: |
+          ! find . \
+            -path './.git' -prune -o \
+            -path './.pytest_cache' -prune -o \
+            -path './__pycache__' -prune -o \
+            \( -name '*.cf' -o -name '*.cfe' -o -name 'merge-report.json' -o -name 'merge-report.txt' -o -name 'merged_cf' \) \
+            -print | grep .
+
+      - name: Check optional private markers
+        if: ${{ vars.PRIVATE_MARKERS_REGEX != '' }}
+        shell: bash
+        run: |
+          ! grep -RInE "${{ vars.PRIVATE_MARKERS_REGEX }}" \
+            --exclude-dir=.git \
+            --exclude-dir=.pytest_cache \
+            --exclude-dir=__pycache__ \
+            .

@@ -1,0 +1,27 @@
+{
+  "v8path": "C:\\Program Files\\1cv8\\8.3.xx.xxxx\\bin",
+  "databases": [
+    {
+      "id": "local-file",
+      "name": "Local cfmerge test infobase",
+      "type": "file",
+      "path": "C:\\path\\to\\test-infobase",
+      "user": "",
+      "password": "",
+      "aliases": ["test"],
+      "branches": ["*"]
+    },
+    {
+      "id": "local-server",
+      "name": "Server cfmerge test infobase",
+      "type": "server",
+      "server": "<server-host>",
+      "ref": "<infobase-ref>",
+      "user": "",
+      "password": "",
+      "aliases": ["server-test"],
+      "branches": ["*"]
+    }
+  ],
+  "default": "local-file"
+}
