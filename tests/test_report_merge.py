@@ -196,6 +196,44 @@ def test_merge_report_missing_parent_is_manual_review(tmp_path: Path) -> None:
     assert "НовыйМакет" not in out.read_text(encoding="utf-16")
 
 
+def test_merge_report_is_skipped_when_files_are_missing(tmp_path: Path) -> None:
+    base = tmp_path / "cf" / "ОтчетПоКонфигурации.txt"
+    ext = tmp_path / "cfu" / "ОтчетПоКонфигурации.txt"
+    out = tmp_path / "out" / "ОтчетПоКонфигурации.txt"
+
+    report = MergeReport()
+    merge_configuration_report(base, ext, out, report)
+    assert not out.exists()
+    assert report.diagnostics["configuration_report_merge"]["strategy"] == "skipped"
+    assert report.warnings == []
+
+    _write_report(base, _report("BaseCfg", [_block("ОбщиеМодули.Базовый", own=True)], own=True))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("base-copy\n", encoding="utf-16", newline="")
+    report = MergeReport()
+    merge_configuration_report(base, ext, out, report)
+    assert out.read_text(encoding="utf-16") == "base-copy\n"
+    assert report.diagnostics["configuration_report_merge"] == {
+        "strategy": "skipped",
+        "base_exists": True,
+        "extension_exists": False,
+    }
+
+    ext.unlink(missing_ok=True)
+    base.unlink()
+    _write_report(ext, _report("ExtCfg", [_block("ОбщиеМодули.Новый", own=True)], own=False))
+    if out.exists():
+        out.unlink()
+    report = MergeReport()
+    merge_configuration_report(base, ext, out, report)
+    assert not out.exists()
+    assert report.diagnostics["configuration_report_merge"] == {
+        "strategy": "skipped",
+        "base_exists": False,
+        "extension_exists": True,
+    }
+
+
 def test_examples_small_report_merge_regression(tmp_path: Path) -> None:
     base = ROOT / "examples" / "small" / "cf" / "ОтчетПоКонфигурации.txt"
     ext = ROOT / "examples" / "small" / "cfu" / "ОтчетПоКонфигурации.txt"

@@ -222,17 +222,19 @@ def _nested_insertions(insertion_roots: list[ReportBlock]) -> dict[str, list[Rep
 
 
 def merge_configuration_report(base_path: Path, ext_path: Path, out_path: Path, report: MergeReport) -> None:
+    if not base_path.exists() or not ext_path.exists():
+        report.diagnostics["configuration_report_merge"] = {
+            "strategy": "skipped",
+            "base_exists": base_path.exists(),
+            "extension_exists": ext_path.exists(),
+        }
+        return
+
     base_lines = _lines(base_path)
     ext_lines = _lines(ext_path)
     encoding, newline = ("utf-16", "lf")
     if base_path.exists():
         encoding, newline = detect_encoding_and_newline(base_path)
-
-    if not base_lines:
-        text = "\n".join(ext_lines).rstrip("\n") + ("\n" if ext_lines else "")
-        write_text(out_path, text, encoding=encoding, newline=newline)
-        report.add_warning("CONFIGURATION_REPORT_MERGED", "ОтчетПоКонфигурации.txt", "Базовый отчет отсутствовал; использован отчет расширения без структурного merge")
-        return
 
     base_doc = parse_report_text("\n".join(base_lines))
     ext_doc = parse_report_text("\n".join(ext_lines))
