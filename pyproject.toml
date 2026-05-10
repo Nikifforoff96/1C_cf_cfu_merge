@@ -25,9 +25,12 @@ classifiers = [
 [project.scripts]
 cfmerge = "cfmerge.cli:main"
 
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
 [project.urls]
-Homepage = "https://github.com/example/cfmerge"
-Issues = "https://github.com/example/cfmerge/issues"
+Homepage = "https://github.com/Nikifforoff96/1C_cf_cfu_merge"
+Issues = "https://github.com/Nikifforoff96/1C_cf_cfu_merge/issues"
 
 [tool.setuptools]
 packages = ["cfmerge"]
