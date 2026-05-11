@@ -5,16 +5,17 @@ from pathlib import Path
 import tempfile
 
 from .bsl_merge import EventHook, clean_extension_module, merge_bsl
-from .classifier import classify_path
+from .classifier import classify_file
 from .config_dump_info import regenerate_config_dump_info, validate_config_dump_info
 from .conflicts import MergeConflict
 from .form_merge import clean_native_form_xml, merge_form_visual
 from .io_utils import copy_file, copy_tree_contents, prepare_output_dir, read_text, write_text
-from .metadata_merge import merge_configuration, merge_metadata_object, xml_is_adopted
+from .metadata_merge import merge_configuration, merge_metadata_object, metadata_full_name, xml_is_adopted
 from .models import MergeAction, MergeConfig, MergeReport
 from .object_registry import build_object_registry
 from .report_merge import merge_configuration_report
 from .reporters import write_human_report, write_json_report
+from .role_rights_merge import copy_role_rights, merge_role_rights
 from .scanner import scan_tree
 from .validators import run_1c_validation, validate_bsl_tree, validate_xml_tree
 
@@ -52,10 +53,47 @@ def _record_changed(report: MergeReport, rel: str, strategy: str) -> None:
     report.add_action(MergeAction(path=rel, strategy=strategy))
 
 
-def _copy_cfu_only_file(cfu_dir: Path, out_dir: Path, rel: str, report: MergeReport, copied_prefixes: set[str]) -> None:
+def _record_resource_skipped(report: MergeReport, rel: str, action: str, reason: str) -> None:
+    report.summary["files_skipped"] += 1
+    report.add_metadata_action(
+        object_path=rel,
+        object_type="ResourceXml",
+        property_path=None,
+        action=action,
+        old_value=None,
+        new_value=None,
+        reason=reason,
+        source_path=rel,
+    )
+
+
+def _copy_resource_file(
+    src: Path,
+    dst: Path,
+    rel: str,
+    kind: str,
+    report: MergeReport,
+    base_config_name: str | None,
+    ext_config_name: str | None,
+) -> str:
+    if kind == "rights_xml":
+        return copy_role_rights(src, dst, rel, report, base_config_name, ext_config_name).strategy
+    copy_file(src, dst)
+    return "copy_native_resource"
+
+
+def _copy_cfu_only_file(
+    cfu_dir: Path,
+    out_dir: Path,
+    rel: str,
+    report: MergeReport,
+    copied_prefixes: set[str],
+    base_config_name: str | None = None,
+    ext_config_name: str | None = None,
+) -> None:
     src = cfu_dir / rel
     dst = out_dir / rel
-    kind = classify_path(rel)
+    kind = classify_file(src, rel)
     if rel in {"ConfigDumpInfo.xml", "Configuration.xml", "ОтчетПоКонфигурации.txt", "СобственныеОбъекты.txt"}:
         report.summary["files_skipped"] += 1
         return
@@ -78,6 +116,19 @@ def _copy_cfu_only_file(cfu_dir: Path, out_dir: Path, rel: str, report: MergeRep
         write_text(dst, clean_extension_module(text), encoding="utf-8-sig", newline="crlf")
         _record_added(report, rel, "copy_orphan_extension_module_cleaned")
         return
+    if kind in {"rights_xml", "unknown_xml"}:
+        if any(rel == prefix or rel.startswith(prefix + "/") for prefix in copied_prefixes):
+            strategy = _copy_resource_file(src, dst, rel, kind, report, base_config_name, ext_config_name)
+            _record_added(report, rel, strategy)
+            return
+        owner = _owner_xml_rel(rel)
+        if owner and _is_xml_native(cfu_dir / owner):
+            strategy = _copy_resource_file(src, dst, rel, kind, report, base_config_name, ext_config_name)
+            _record_added(report, rel, "copy_native_owner_resource_rebased" if strategy.endswith("_rebased") else "copy_native_owner_resource")
+            return
+        report.add_warning("UNSUPPORTED_RESOURCE_XML_SKIPPED", rel, "Resource XML was not copied without a native extension owner")
+        _record_resource_skipped(report, rel, "unsupported_resource_xml", "no_native_extension_owner")
+        return
     if any(rel == prefix or rel.startswith(prefix + "/") for prefix in copied_prefixes):
         copy_file(src, dst)
         _record_added(report, rel, "copy_native_resource")
@@ -87,7 +138,7 @@ def _copy_cfu_only_file(cfu_dir: Path, out_dir: Path, rel: str, report: MergeRep
         copy_file(src, dst)
         _record_added(report, rel, "copy_native_owner_resource")
         return
-    report.summary["files_skipped"] += 1
+    _record_resource_skipped(report, rel, "auxiliary_xml_skipped", "unsupported_or_adopted_owner")
 
 
 def merge(cfg: MergeConfig) -> MergeReport:
@@ -122,6 +173,8 @@ def merge(cfg: MergeConfig) -> MergeReport:
     ext_manifest = scan_tree(cfg.cfu_dir)
     base_registry = build_object_registry(cfg.cf_dir)
     ext_registry = build_object_registry(cfg.cfu_dir)
+    base_config_name = metadata_full_name(cfg.cf_dir / "Configuration.xml")[1]
+    ext_config_name = metadata_full_name(cfg.cfu_dir / "Configuration.xml")[1]
     report = MergeReport()
     report.input = {
         "cf": str(cfg.cf_dir),
@@ -162,7 +215,7 @@ def merge(cfg: MergeConfig) -> MergeReport:
             if strategy != "keep_base_adopted_metadata":
                 _record_changed(report, rel, strategy)
             continue
-        _copy_cfu_only_file(cfg.cfu_dir, cfg.out_dir, rel, report, copied_prefixes)
+        _copy_cfu_only_file(cfg.cfu_dir, cfg.out_dir, rel, report, copied_prefixes, base_config_name, ext_config_name)
 
     event_hooks_by_module: dict[str, list[EventHook]] = {}
     for rel, ext_rec in sorted(ext_manifest.items()):
@@ -217,10 +270,29 @@ def merge(cfg: MergeConfig) -> MergeReport:
 
     for rel, ext_rec in sorted(ext_manifest.items()):
         if (cfg.out_dir / rel).exists():
+            if ext_rec.kind == "rights_xml" and (cfg.cf_dir / rel).exists() and ext_rec.sha256 != base_manifest.get(rel, ext_rec).sha256:
+                result = merge_role_rights(
+                    cfg.cf_dir / rel,
+                    ext_rec.abs_path,
+                    cfg.out_dir / rel,
+                    rel,
+                    report,
+                    base_config_name,
+                    ext_config_name,
+                )
+                if result.changed:
+                    _record_changed(report, rel, result.strategy)
+            elif ext_rec.kind == "unknown_xml" and (cfg.cf_dir / rel).exists() and ext_rec.sha256 != base_manifest.get(rel, ext_rec).sha256:
+                report.add_warning(
+                    "UNSUPPORTED_RESOURCE_XML_SKIPPED",
+                    rel,
+                    "Existing base resource XML was not overwritten by extension XML",
+                )
+                _record_resource_skipped(report, rel, "unsupported_resource_xml", "existing_base_resource_not_overwritten")
             continue
         if ext_rec.kind in {"root_configuration", "config_dump_info", "configuration_report", "metadata_xml", "form_object_xml", "form_visual_xml", "bsl_module"}:
             continue
-        _copy_cfu_only_file(cfg.cfu_dir, cfg.out_dir, rel, report, copied_prefixes)
+        _copy_cfu_only_file(cfg.cfu_dir, cfg.out_dir, rel, report, copied_prefixes, base_config_name, ext_config_name)
 
     merge_configuration_report(
         cfg.cf_dir / "ОтчетПоКонфигурации.txt",

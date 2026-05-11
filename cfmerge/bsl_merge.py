@@ -321,8 +321,6 @@ def _apply_inline_hooks(text: str, path: str, ext_methods: list[BslMethod], even
             body = _hook_body(hook).replace("{args}", args)
             before_parts.append(ensure_body_terminated_before_append(body))
         after_parts: list[str] = []
-        if groups["after"] and body_has_early_return(target.body_text):
-            warnings.append(f"AFTER_INLINE_TARGET_HAS_EARLY_RETURN для {target_name}")
         for hook in groups["after"]:
             body = _hook_body(hook).replace("{args}", args)
             after_parts.append(ensure_body_terminated_before_append(body))

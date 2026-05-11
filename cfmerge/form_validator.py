@@ -5,7 +5,6 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
 
-from .bsl_parser import parse_module
 from .models import MergeReport
 from .xml_utils import child, children, local_name, parse_xml
 
@@ -90,7 +89,21 @@ def _is_resolved_data_path(value: str, attribute_names: set[str], child_item_nam
     return head in attribute_names or head in child_item_names
 
 
-def validate_form_result(form_path: Path, report: MergeReport) -> None:
+def _duplicate_counts(values: list[str]) -> Counter[str]:
+    return Counter(value for value in values if value)
+
+
+def _new_or_increased_duplicates(result_values: list[str], base_values: list[str]) -> list[str]:
+    result_counts = _duplicate_counts(result_values)
+    base_counts = _duplicate_counts(base_values)
+    return sorted(
+        value
+        for value, count in result_counts.items()
+        if count > 1 and count > base_counts.get(value, 0)
+    )
+
+
+def validate_form_result(form_path: Path, report: MergeReport, base_form_path: Path | None = None) -> None:
     try:
         tree = parse_xml(form_path)
     except Exception as exc:
@@ -98,26 +111,19 @@ def validate_form_result(form_path: Path, report: MergeReport) -> None:
         return
     root = tree.getroot()
     names, ids = _childitem_elements(root)
-    duplicate_names = sorted(name for name, count in Counter(names).items() if count > 1)
-    duplicate_ids = sorted(ident for ident, count in Counter(ids).items() if count > 1)
+    base_names: list[str] = []
+    base_ids: list[str] = []
+    if base_form_path is not None and base_form_path.exists():
+        try:
+            base_names, base_ids = _childitem_elements(parse_xml(base_form_path).getroot())
+        except Exception:
+            base_names, base_ids = [], []
+    duplicate_names = _new_or_increased_duplicates(names, base_names)
+    duplicate_ids = _new_or_increased_duplicates(ids, base_ids)
     for name in duplicate_names[:50]:
         report.add_conflict("FORM_DUPLICATE_CHILD_ITEM_NAME", str(form_path), name)
     for ident in duplicate_ids[:50]:
         report.add_conflict("FORM_DUPLICATE_CHILD_ITEM_ID", str(form_path), ident)
-
-    module_path = form_path.parent / "Form" / "Module.bsl"
-    if module_path.exists():
-        try:
-            methods = {
-                method.local_name.lower()
-                for method in parse_module(module_path.read_text(encoding="utf-8-sig", errors="ignore")).methods
-            }
-        except Exception as exc:
-            report.add_conflict("FORM_MODULE_PARSE_FAILED", str(module_path), str(exc))
-            methods = set()
-        for handler in _collect_handlers(root):
-            if handler.lower() not in methods:
-                report.add_conflict("FORM_HANDLER_MISSING", str(form_path), handler)
 
     attribute_names = _collect_attribute_names(root)
     child_item_names = _collect_child_item_names(root)

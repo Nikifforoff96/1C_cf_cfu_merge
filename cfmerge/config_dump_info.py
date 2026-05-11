@@ -162,6 +162,12 @@ def regenerate_config_dump_info(out_dir: Path, base_info: Path | None, ext_info:
             full = f"Configuration.{root_name}.{suffix}"
             _upsert(full, f"{root_uuid}.0", _version_for(bsl))
 
+    if root_name:
+        root_prefix = f"Configuration.{root_name}"
+        for full_name in list(entry_by_name):
+            if full_name.startswith("Configuration.") and full_name != root_prefix and not full_name.startswith(root_prefix + "."):
+                del entry_by_name[full_name]
+
     entries = sorted(entry_by_name.values(), key=lambda e: e.attrib["name"].lower())
     for entry in entries:
         versions.append(entry)

@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:app="http://v8.1c.ru/8.2/managed-application/core" xmlns:cfg="http://v8.1c.ru/8.1/data/enterprise/current-config" xmlns:cmi="http://v8.1c.ru/8.2/managed-application/cmi" xmlns:ent="http://v8.1c.ru/8.1/data/enterprise" xmlns:lf="http://v8.1c.ru/8.2/managed-application/logform" xmlns:style="http://v8.1c.ru/8.1/data/ui/style" xmlns:sys="http://v8.1c.ru/8.1/data/ui/fonts/system" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:v8ui="http://v8.1c.ru/8.1/data/ui" xmlns:web="http://v8.1c.ru/8.1/data/ui/colors/web" xmlns:win="http://v8.1c.ru/8.1/data/ui/colors/windows" xmlns:xen="http://v8.1c.ru/8.3/xcf/enums" xmlns:xpr="http://v8.1c.ru/8.3/xcf/predef" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="2.20">
+	<Catalog uuid="a2173365-93a2-43fe-b213-083ffd882e50">
+		<InternalInfo>
+			<xr:GeneratedType name="CatalogObject.ВторойСправочник" category="Object">
+				<xr:TypeId>a278f552-35db-42d1-9a63-933c61a89784</xr:TypeId>
+				<xr:ValueId>3fc5d042-abdc-4dc9-b1af-400459da4cec</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="CatalogRef.ВторойСправочник" category="Ref">
+				<xr:TypeId>4230001b-eebd-4f2f-b6d9-36e8f3a00b89</xr:TypeId>
+				<xr:ValueId>6d804119-6b11-415f-adcc-9050f65ccca0</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="CatalogSelection.ВторойСправочник" category="Selection">
+				<xr:TypeId>ee375db3-ddcb-4577-9b00-aa7d6710648d</xr:TypeId>
+				<xr:ValueId>9109e86d-6a15-4033-9e09-e402c3496e8d</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="CatalogList.ВторойСправочник" category="List">
+				<xr:TypeId>27e72bb8-2650-4f44-b803-a4773ac20c9d</xr:TypeId>
+				<xr:ValueId>e15b3d7e-aeb9-479a-8f79-8bd7edb63e8b</xr:ValueId>
+			</xr:GeneratedType>
+			<xr:GeneratedType name="CatalogManager.ВторойСправочник" category="Manager">
+				<xr:TypeId>15a55fb9-826d-4800-85a2-058428fecfaa</xr:TypeId>
+				<xr:ValueId>75bf2894-24d4-4da5-92ed-78205b2d87ea</xr:ValueId>
+			</xr:GeneratedType>
+		</InternalInfo>
+		<Properties>
+			<ObjectBelonging>Adopted</ObjectBelonging>
+			<Name>ВторойСправочник</Name>
+			<Comment/>
+			<ExtendedConfigurationObject>0f0fda3b-e133-4a21-8afc-d6ef31edb8c1</ExtendedConfigurationObject>
+		</Properties>
+		<ChildObjects>
+			<Form>ФормаЭлемента</Form>
+		</ChildObjects>
+	</Catalog>
+</MetaDataObject>

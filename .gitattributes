@@ -10,6 +10,7 @@
 *.bsl text eol=crlf
 *.xml text eol=crlf
 *.txt text
+**/ОтчетПоКонфигурации.txt -text
 
 *.bin binary
 *.cf binary

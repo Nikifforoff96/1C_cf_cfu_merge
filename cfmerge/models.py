@@ -130,9 +130,13 @@ class MergeReport:
     validation: dict[str, str] = field(default_factory=dict)
     diagnostics: dict[str, Any] = field(default_factory=dict)
     actions: list[MergeAction] = field(default_factory=list)
+    metadata_merge: list[dict[str, Any]] = field(default_factory=list)
 
     def add_action(self, action: MergeAction) -> None:
         self.actions.append(action)
+
+    def add_metadata_action(self, **kwargs: Any) -> None:
+        self.metadata_merge.append(kwargs)
 
     def add_warning(self, code: str, path: str, details: str = "", **kwargs: Any) -> None:
         self.warnings.append(ConflictRecord(code=code, severity="warning", path=path, details=details, **kwargs))

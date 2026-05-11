@@ -59,13 +59,20 @@ def validate_xml_tree(out_dir: Path, report: MergeReport, base_dir: Path | None 
         if path.name == "Form.xml" and re.search(r"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?BaseForm\b", text):
             baseform_errors.append(str(path))
         if path.name == "Form.xml":
-            validate_form_result(path, report)
+            base_form_path = None
+            if base_dir is not None and base_dir.exists():
+                try:
+                    base_form_path = base_dir / path.relative_to(out_dir)
+                except ValueError:
+                    base_form_path = None
+            validate_form_result(path, report, base_form_path=base_form_path)
         if path.name not in {"ConfigDumpInfo.xml"}:
             if (
                 re.search(r"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?ObjectBelonging>\s*Adopted\s*</", text)
                 or re.search(r"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?ExtendedConfigurationObject\b", text)
                 or re.search(r"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?ConfigurationExtensionPurpose\b", text)
                 or re.search(r"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?NamePrefix>\s*[^<\s]+", text)
+                or re.search(r'\bxsi:type="(?:[A-Za-z_][A-Za-z0-9_.-]*:)?ExtendedProperty"', text)
             ):
                 adopted_leaks.append(str(path))
     if errors:

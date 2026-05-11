@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -646,10 +646,15 @@ def test_form_command_interface_existing_current_collision_is_diagnostic(tmp_pat
 
     root, report, _ = _merge(tmp_path, base_form=base_form, ext_form=ext_form)
 
-    assert any(item.code == "FORM_COMMAND_INTERFACE_CONFLICT" for item in report.conflicts)
+    assert not any(item.code == "FORM_COMMAND_INTERFACE_CONFLICT" for item in report.conflicts)
     text = ET.tostring(root, encoding="unicode")
     assert 'Value name="FunctionalOption.UseTasks">true</' in text
-    assert "<Common>false</Common>" in text
+    assert "<Type>Added</Type>" in text
+    assert "<Common>true</Common>" in text
+    assert any(
+        item["action"] == "form_command_interface_property_replaced"
+        for item in report.metadata_merge
+    )
 
 
 def test_form_event_after_with_base_handler(tmp_path: Path) -> None:
@@ -676,6 +681,41 @@ def test_form_event_after_with_base_handler(tmp_path: Path) -> None:
     assert event.text == "BaseHandler"
 
 
+def test_form_event_before_and_after_same_event_are_both_inlined(tmp_path: Path) -> None:
+    base_form = _form(body="""
+  <Events><Event name="OnOpen">BaseHandler</Event></Events>
+""")
+    ext_form = _form(body="""
+  <Events>
+    <Event name="OnOpen" callType="Before">BeforeHandler</Event>
+    <Event name="OnOpen" callType="After">AfterHandler</Event>
+  </Events>
+  <BaseForm><Events><Event name="OnOpen">BaseHandler</Event></Events></BaseForm>
+""")
+    ext_module = """
+Процедура BeforeHandler(Отказ)
+	Сообщить("before");
+КонецПроцедуры
+
+Процедура AfterHandler(Отказ)
+	Сообщить("after");
+КонецПроцедуры
+"""
+    base_module = """
+Процедура BaseHandler(Отказ)
+	Сообщить("base");
+КонецПроцедуры
+"""
+
+    _, report, hooks = _merge(tmp_path, base_form=base_form, ext_form=ext_form, ext_module=ext_module)
+    result = merge_bsl(base_module, ext_module, "Form/Module.bsl", hooks)
+
+    assert not report.conflicts
+    assert [(hook.extension_handler, hook.mode) for hook in hooks] == [("BeforeHandler", "before"), ("AfterHandler", "after")]
+    assert result.text.index("\tBeforeHandler(Отказ);") < result.text.index('\tСообщить("base");')
+    assert result.text.index('\tСообщить("base");') < result.text.index("\tAfterHandler(Отказ);")
+
+
 def test_form_event_override_missing_handler(tmp_path: Path) -> None:
     base_form = _form(body="""
   <Events><Event name="OnOpen">BaseHandler</Event></Events>
@@ -689,7 +729,67 @@ def test_form_event_override_missing_handler(tmp_path: Path) -> None:
 
     event = next(item for item in root.iter() if isinstance(item.tag, str) and item.tag.endswith("Event"))
     assert event.text == "BaseHandler"
-    assert any(item.code == "FORM_EVENT_HANDLER_NOT_FOUND_IN_EXTENSION_MODULE" for item in report.conflicts)
+    assert not report.conflicts
+
+
+def test_form_validator_ignores_missing_handlers(tmp_path: Path) -> None:
+    form_path = tmp_path / "Form.xml"
+    _write(
+        form_path,
+        _form(body="""
+  <Events><Event name="OnOpen">MissingHandler</Event></Events>
+"""),
+    )
+    report = MergeReport()
+
+    validate_form_result(form_path, report)
+
+    assert not any(item.code == "FORM_HANDLER_MISSING" for item in report.conflicts)
+
+
+def test_form_validator_ignores_preexisting_duplicate_child_item_names(tmp_path: Path) -> None:
+    base = tmp_path / "base.xml"
+    result = tmp_path / "result.xml"
+    form_text = _form(body="""
+  <ChildItems>
+    <Group name="Parent1" id="1"><ChildItems><ContextMenu name="SameMenu" id="2" /></ChildItems></Group>
+    <Group name="Parent2" id="3"><ChildItems><ContextMenu name="SameMenu" id="4" /></ChildItems></Group>
+  </ChildItems>
+""")
+    _write(base, form_text)
+    _write(result, form_text)
+    report = MergeReport()
+
+    validate_form_result(result, report, base_form_path=base)
+
+    assert not any(item.code == "FORM_DUPLICATE_CHILD_ITEM_NAME" for item in report.conflicts)
+
+
+def test_form_validator_reports_new_duplicate_child_item_names(tmp_path: Path) -> None:
+    base = tmp_path / "base.xml"
+    result = tmp_path / "result.xml"
+    _write(
+        base,
+        _form(body="""
+  <ChildItems>
+    <Group name="Parent1" id="1"><ChildItems><ContextMenu name="SameMenu" id="2" /></ChildItems></Group>
+  </ChildItems>
+"""),
+    )
+    _write(
+        result,
+        _form(body="""
+  <ChildItems>
+    <Group name="Parent1" id="1"><ChildItems><ContextMenu name="SameMenu" id="2" /></ChildItems></Group>
+    <Group name="Parent2" id="3"><ChildItems><ContextMenu name="SameMenu" id="4" /></ChildItems></Group>
+  </ChildItems>
+"""),
+    )
+    report = MergeReport()
+
+    validate_form_result(result, report, base_form_path=base)
+
+    assert any(item.code == "FORM_DUPLICATE_CHILD_ITEM_NAME" for item in report.conflicts)
 
 
 def test_form_id_collision_added_node(tmp_path: Path) -> None:

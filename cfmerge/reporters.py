@@ -47,6 +47,18 @@ def write_human_report(report: MergeReport, path: Path) -> None:
             lines.append(f"- {item.get('type')}: {item.get('name')} ({item.get('path')}) [{item.get('strategy')}]")
         if len(report.objects["modified"]) > 200:
             lines.append(f"- ... еще {len(report.objects['modified']) - 200}")
+    if report.metadata_merge:
+        lines.append("")
+        lines.append("Metadata merge:")
+        for item in report.metadata_merge[:300]:
+            object_path = item.get("object_path") or item.get("source_path")
+            prop = item.get("property_path")
+            action = item.get("action")
+            reason = item.get("reason")
+            suffix = f" {prop}" if prop else ""
+            lines.append(f"- {action}: {object_path}{suffix} [{reason}]")
+        if len(report.metadata_merge) > 300:
+            lines.append(f"- ... more {len(report.metadata_merge) - 300}")
     if report.warnings:
         lines.append("")
         lines.append("Предупреждения:")

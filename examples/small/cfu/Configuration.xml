@@ -44,7 +44,7 @@
 			<ConfigurationExtensionPurpose>Customization</ConfigurationExtensionPurpose>
 			<KeepMappingToExtendedConfigurationObjectsByIDs>true</KeepMappingToExtendedConfigurationObjectsByIDs>
 			<NamePrefix>ом</NamePrefix>
-			<ConfigurationExtensionCompatibilityMode>Version8_3_27</ConfigurationExtensionCompatibilityMode>
+			<ConfigurationExtensionCompatibilityMode>Version8_3_21</ConfigurationExtensionCompatibilityMode>
 			<DefaultRunMode>ManagedApplication</DefaultRunMode>
 			<UsePurposes>
 				<v8:Value xsi:type="app:ApplicationUsePurpose">PlatformApplication</v8:Value>
@@ -60,15 +60,24 @@
 			<VendorInformationAddress/>
 			<ConfigurationInformationAddress/>
 			<InterfaceCompatibilityMode>Taxi</InterfaceCompatibilityMode>
+			<CompatibilityMode>Version8_3_21</CompatibilityMode>
 		</Properties>
 		<ChildObjects>
 			<Language>Русский</Language>
+			<Role>ЧастичныеПрава</Role>
+			<Role>омРольРасширения</Role>
 			<CommonModule>ОбщийМодуль1</CommonModule>
 			<CommonModule>омОбщийМодульРасширения2</CommonModule>
 			<Catalog>ТестСправочник</Catalog>
+			<Catalog>омСправочникРасширения</Catalog>
+			<Catalog>ВторойСправочник</Catalog>
 			<Document>Документ1</Document>
+			<Enum>Перечисление1</Enum>
 			<DataProcessor>Обработка1</DataProcessor>
 			<DataProcessor>омОбработкаРасширение2</DataProcessor>
+			<InformationRegister>омРегистрСведений1</InformationRegister>
+			<InformationRegister>омРегистрСведений2</InformationRegister>
+			<InformationRegister>РегистрСведений1</InformationRegister>
 		</ChildObjects>
 	</Configuration>
 </MetaDataObject>

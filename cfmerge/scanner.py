@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .classifier import classify_path, object_locator
+from .classifier import classify_file, object_locator
 from .io_utils import detect_encoding_and_newline, normalize_rel, sha256_file
 from .models import FileRecord
 from .object_registry import read_object_ref
@@ -16,7 +16,7 @@ def scan_tree(root: Path) -> dict[str, FileRecord]:
         rel = normalize_rel(path.relative_to(root))
         encoding, newline = detect_encoding_and_newline(path)
         object_type, object_name = object_locator(rel)
-        kind = classify_path(rel)
+        kind = classify_file(path, rel)
         if kind in {"metadata_xml", "form_object_xml"}:
             ref = read_object_ref(root, path)
             if ref is not None:

@@ -22,6 +22,10 @@
 				<xr:TypeId>2678b5fc-f450-4989-87f1-f171e8df99dc</xr:TypeId>
 				<xr:ValueId>c6b5728f-8c3d-41c2-bb00-a59e97e55f1c</xr:ValueId>
 			</xr:GeneratedType>
+			<xr:PropertyState>
+				<xr:Property>ObjectModule</xr:Property>
+				<xr:State>Extended</xr:State>
+			</xr:PropertyState>
 		</InternalInfo>
 		<Properties>
 			<ObjectBelonging>Adopted</ObjectBelonging>
@@ -35,18 +39,37 @@
 		</Properties>
 		<ChildObjects>
 			<Attribute uuid="adf0b8bc-8efd-46e7-a479-3038daac52cf">
-				<InternalInfo/>
+				<InternalInfo>
+					<xr:PropertyState>
+						<xr:Property>Type</xr:Property>
+						<xr:State>MultiState</xr:State>
+					</xr:PropertyState>
+				</InternalInfo>
 				<Properties>
 					<ObjectBelonging>Adopted</ObjectBelonging>
 					<Name>Реквизит1</Name>
+					<Synonym>
+						<v8:item>
+							<v8:lang>ru</v8:lang>
+							<v8:content>Первый реквизит</v8:content>
+						</v8:item>
+					</Synonym>
 					<Comment/>
 					<ExtendedConfigurationObject>49e69e55-3b10-449e-a479-f7db5d708e0d</ExtendedConfigurationObject>
-					<Type>
-						<v8:Type>xs:string</v8:Type>
-						<v8:StringQualifiers>
-							<v8:Length>10</v8:Length>
-							<v8:AllowedLength>Variable</v8:AllowedLength>
-						</v8:StringQualifiers>
+					<Type xsi:type="xr:ExtendedProperty">
+						<xr:CheckValue xsi:type="v8:TypeDescription">
+							<v8:Type>xs:string</v8:Type>
+							<v8:StringQualifiers>
+								<v8:Length>10</v8:Length>
+								<v8:AllowedLength>Variable</v8:AllowedLength>
+							</v8:StringQualifiers>
+						</xr:CheckValue>
+						<xr:ExtendValue xsi:type="v8:TypeDescription">
+							<v8:Type>xs:dateTime</v8:Type>
+							<v8:DateQualifiers>
+								<v8:DateFractions>DateTime</v8:DateFractions>
+							</v8:DateQualifiers>
+						</xr:ExtendValue>
 					</Type>
 				</Properties>
 			</Attribute>

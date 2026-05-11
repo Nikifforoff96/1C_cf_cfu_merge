@@ -39,6 +39,12 @@ def _event_map(container: ET.Element | None) -> dict[str, ET.Element]:
     return {item.attrib.get("name", ""): item for item in children(container, "Event")}
 
 
+def _event_items(container: ET.Element | None) -> list[ET.Element]:
+    if container is None:
+        return []
+    return children(container, "Event")
+
+
 def _ensure_events(owner: ET.Element) -> ET.Element:
     events = child(owner, "Events")
     if events is not None:
@@ -78,13 +84,6 @@ def _merge_action(
             report.add_conflict("UNKNOWN_FORM_CALL_TYPE", rel_path, f"{owner_label}/Action callType={call_type}")
             return
         if not _handler_exists(extension_handler, methods):
-            report.add_conflict(
-                "FORM_EVENT_HANDLER_NOT_FOUND_IN_EXTENSION_MODULE",
-                rel_path,
-                f"{owner_label}/Action -> {extension_handler}",
-                object_type="FormAction",
-                object_name=owner_label,
-            )
             return
         if mode == "override":
             if current_action is None:
@@ -120,7 +119,6 @@ def _merge_action(
         stats.xml_events += 1
         return
     if current_action is None:
-        report.add_conflict("FORM_ACTION_HANDLER_NOT_FOUND", rel_path, f"{owner_label}/Action -> {extension_handler}")
         return
     if extension_handler == ancestor_handler or extension_handler == current_handler:
         return
@@ -154,13 +152,14 @@ def merge_events_for_owner(
     hooks: list[EventHook],
     methods: ModuleMethodIndex,
 ) -> None:
-    extension_events = _event_map(child(extension_owner, "Events"))
+    extension_events = _event_items(child(extension_owner, "Events"))
     ancestor_events = _event_map(child(ancestor_owner, "Events") if ancestor_owner is not None else None)
     current_events_container = child(current_owner, "Events")
     current_events = _event_map(current_events_container)
     owner_label = owner_key.render() if owner_key is not None else "form"
 
-    for event_name, extension_event in extension_events.items():
+    for extension_event in extension_events:
+        event_name = extension_event.attrib.get("name", "")
         ancestor_event = ancestor_events.get(event_name)
         current_event = current_events.get(event_name)
         call_type = extension_event.attrib.get("callType")
@@ -174,13 +173,6 @@ def merge_events_for_owner(
                 report.add_conflict("UNKNOWN_FORM_CALL_TYPE", rel_path, f"{owner_label}/{event_name} callType={call_type}")
                 continue
             if not _handler_exists(extension_handler, methods):
-                report.add_conflict(
-                    "FORM_EVENT_HANDLER_NOT_FOUND_IN_EXTENSION_MODULE",
-                    rel_path,
-                    f"{owner_label}/{event_name} -> {extension_handler}",
-                    object_type="FormEvent",
-                    object_name=event_name,
-                )
                 continue
             if mode == "override":
                 if current_event is None:
@@ -223,7 +215,6 @@ def merge_events_for_owner(
             stats.xml_events += 1
             continue
         if current_event is None:
-            report.add_conflict("FORM_EVENT_HANDLER_NOT_FOUND", rel_path, f"{owner_label}/{event_name} -> {extension_handler}")
             continue
         if extension_handler == ancestor_handler or extension_handler == current_handler:
             continue

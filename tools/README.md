@@ -1,4 +1,4 @@
-﻿# 1C CLI Tools
+# 1C CLI Tools
 
 This directory contains helper scripts for local 1C:Enterprise Designer validation.
 
@@ -17,7 +17,7 @@ Srvr="<server-host>";Ref="<infobase-ref>"
 ```
 
 If the test infobase requires authentication, pass `-UserName` and optionally `-Password`.
-For the dedicated server test infobase of this project, use `-UserName "Администратор"` and do not pass `-Password` while the password is empty.
+If the password is empty, do not pass `-Password`.
 
 Default platform:
 
@@ -58,14 +58,14 @@ powershell.exe -NoProfile -File ".\tools\1c-db-ops\scripts\db-dump-cf.ps1" `
   -OutputFile "<output_cf_path>"
 ```
 
-Server example for this project:
+Server example:
 
 ```powershell
 powershell.exe -NoProfile -File ".\tools\1c-db-ops\scripts\db-load-xml.ps1" `
   -V8Path "C:\Program Files\1cv8\8.3.27.1644\bin" `
   -InfoBaseServer "<server-host>" `
   -InfoBaseRef "<infobase-ref>" `
-  -UserName "Администратор" `
+  -UserName "<user-name>" `
   -ConfigDir "<config_dump_dir>" `
   -Mode Full
 ```

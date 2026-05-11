@@ -385,6 +385,7 @@ def test_form_property_delta_is_applied_semantically(tmp_path: Path) -> None:
 def test_validators_catch_plain_result_artifacts_without_false_string_hits(tmp_path: Path) -> None:
     out = tmp_path / "out"
     _write(out / "Configuration.xml", _config("Base", ""))
+    _write(out / "Catalogs" / "ExtendedPropertyLeak.xml", f'<MetaDataObject xmlns="{MD}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable"><Catalog><Properties><Name>ExtendedPropertyLeak</Name><Type xsi:type="xr:ExtendedProperty"/></Properties></Catalog></MetaDataObject>')
     _write(out / "CommonModules" / "Модуль.xml", _common_module("Модуль", "id", adopted=True))
     _write(out / "CommonModules" / "Модуль" / "Ext" / "Module.bsl", 'Текст = "&ПереданныеДела";\n&Перед("Цель")\nПроцедура НСК()\nКонецПроцедуры\n')
     _write(out / "Catalogs" / "Справочник" / "Forms" / "Форма" / "Ext" / "Form.xml", f'<Form xmlns="{LF}"><BaseForm/><Events><Event name="OnOpen" callType="Before">НСК</Event></Events></Form>')

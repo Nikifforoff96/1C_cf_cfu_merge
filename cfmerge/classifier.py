@@ -1,6 +1,21 @@
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET
+from pathlib import Path
 from pathlib import PurePosixPath
+
+
+NS_MD = "http://v8.1c.ru/8.3/MDClasses"
+NS_LF = "http://v8.1c.ru/8.3/xcf/logform"
+NS_ROLES = "http://v8.1c.ru/8.2/roles"
+
+
+def _local_name(tag: str) -> str:
+    return tag.split("}", 1)[-1] if tag.startswith("{") else tag
+
+
+def _namespace(tag: str) -> str:
+    return tag[1:].split("}", 1)[0] if tag.startswith("{") else ""
 
 
 def classify_path(rel_path: str) -> str:
@@ -16,11 +31,39 @@ def classify_path(rel_path: str) -> str:
         return "bsl_module"
     if rel.endswith("/Ext/Form.xml"):
         return "form_visual_xml"
+    if rel.endswith("/Ext/Rights.xml"):
+        return "rights_xml"
     if "/Forms/" in rel and name.endswith(".xml"):
         return "form_object_xml"
     if name.endswith(".xml"):
         return "metadata_xml"
     return "binary_or_resource"
+
+
+def classify_file(path: Path, rel_path: str) -> str:
+    coarse = classify_path(rel_path)
+    if not rel_path.lower().endswith(".xml"):
+        return coarse
+    if coarse in {"root_configuration", "config_dump_info", "form_visual_xml", "rights_xml"}:
+        return coarse
+
+    try:
+        root = ET.parse(path).getroot()
+    except Exception:
+        return "unknown_xml"
+
+    root_local = _local_name(root.tag)
+    root_ns = _namespace(root.tag)
+    if root_local == "MetaDataObject" and root_ns == NS_MD:
+        object_element = next((item for item in list(root) if isinstance(item.tag, str)), None)
+        if object_element is not None:
+            return coarse if coarse in {"metadata_xml", "form_object_xml"} else "metadata_xml"
+        return "unknown_xml"
+    if root_local == "Form" and root_ns == NS_LF:
+        return "form_visual_xml"
+    if root_local == "Rights" and root_ns == NS_ROLES:
+        return "rights_xml"
+    return "unknown_xml"
 
 
 DIR_TO_TYPE = {

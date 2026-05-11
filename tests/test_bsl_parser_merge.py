@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from cfmerge.bsl_merge import merge_bsl
 from cfmerge.bsl_parser import parse_module
@@ -114,6 +114,25 @@ def test_after_inline_terminates_base_last_statement() -> None:
     result = merge_bsl(base, ext, "Form/Module.bsl").text
 
     assert "УстановитьДоступностьОпций(ЭтотОбъект);\r\n\tПосле();" in result
+
+
+def test_after_inline_with_early_return_does_not_warn() -> None:
+    base = (
+        '\u041f\u0440\u043e\u0446\u0435\u0434\u0443\u0440\u0430 \u0426\u0435\u043b\u044c()\r\n'
+        '\t\u0412\u043e\u0437\u0432\u0440\u0430\u0442;\r\n'
+        '\u041a\u043e\u043d\u0435\u0446\u041f\u0440\u043e\u0446\u0435\u0434\u0443\u0440\u044b\r\n'
+    )
+    ext = (
+        '&\u041f\u043e\u0441\u043b\u0435("\u0426\u0435\u043b\u044c")\r\n'
+        '\u041f\u0440\u043e\u0446\u0435\u0434\u0443\u0440\u0430 \u041d\u0421\u041a_\u041f\u043e\u0441\u043b\u0435()\r\n'
+        '\t\u041f\u043e\u0441\u043b\u0435();\r\n'
+        '\u041a\u043e\u043d\u0435\u0446\u041f\u0440\u043e\u0446\u0435\u0434\u0443\u0440\u044b\r\n'
+    )
+
+    result = merge_bsl(base, ext, "Module.bsl")
+
+    assert result.warnings == []
+    assert "\u041f\u043e\u0441\u043b\u0435();" in result.text
 
 
 def test_after_with_blank_line_annotation_is_not_appended_as_plain_method() -> None:

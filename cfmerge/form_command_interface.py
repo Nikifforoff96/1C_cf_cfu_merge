@@ -86,6 +86,65 @@ def _conflict(
     )
 
 
+def _record_extension_wins(
+    report: MergeReport,
+    *,
+    rel_path: str,
+    item_key: tuple[str, ...],
+    property_key: tuple[str, ...],
+    current: str | None,
+    extension: str | None,
+    reason: str,
+) -> None:
+    report.add_metadata_action(
+        object_path=f"CommandInterface/{'/'.join(item_key)}",
+        object_type="CommandInterface",
+        property_path="/".join(property_key),
+        action="form_command_interface_property_replaced",
+        old_value=current[:4000] if current is not None else None,
+        new_value=extension[:4000] if extension is not None else None,
+        reason=reason,
+        source_path=rel_path,
+    )
+
+
+def _apply_extension_property(
+    current_parent: ET.Element,
+    current_prop: ET.Element | None,
+    extension_prop: ET.Element | None,
+    *,
+    rel_path: str,
+    report: MergeReport,
+    stats: FormMergeStats,
+    item_key: tuple[str, ...],
+    property_key: tuple[str, ...],
+    reason: str,
+) -> None:
+    current_sig = normalize_xml_fragment(current_prop)
+    extension_sig = normalize_xml_fragment(extension_prop)
+    if current_prop is None:
+        if extension_prop is not None:
+            current_parent.append(clone_element(extension_prop))
+            stats.command_interface_changed += 1
+        else:
+            return
+    elif extension_prop is None:
+        current_parent.remove(current_prop)
+        stats.command_interface_changed += 1
+    else:
+        _replace_existing(current_parent, current_prop, clone_element(extension_prop))
+        stats.command_interface_changed += 1
+    _record_extension_wins(
+        report,
+        rel_path=rel_path,
+        item_key=item_key,
+        property_key=property_key,
+        current=current_sig,
+        extension=extension_sig,
+        reason=reason,
+    )
+
+
 def _merge_property_children(
     current_parent: ET.Element,
     ancestor_parent: ET.Element | None,
@@ -117,14 +176,16 @@ def _merge_property_children(
                 current_parent.remove(current_prop)
                 stats.command_interface_changed += 1
                 continue
-            _conflict(
-                report,
+            _apply_extension_property(
+                current_parent,
+                current_prop,
+                None,
                 rel_path=rel_path,
+                report=report,
+                stats=stats,
                 item_key=item_key,
                 property_key=property_key,
-                ancestor=ancestor_sig,
-                current=current_sig,
-                extension="<removed>",
+                reason="extension_command_interface_property_removed",
             )
             continue
 
@@ -141,14 +202,16 @@ def _merge_property_children(
                 current_parent.append(clone_element(extension_prop))
                 stats.command_interface_changed += 1
                 continue
-            _conflict(
-                report,
+            _apply_extension_property(
+                current_parent,
+                None,
+                extension_prop,
                 rel_path=rel_path,
+                report=report,
+                stats=stats,
                 item_key=item_key,
                 property_key=property_key,
-                ancestor=ancestor_sig,
-                current="<removed>",
-                extension=extension_sig,
+                reason="extension_command_interface_property_wins",
             )
             continue
         if ancestor_prop is not None and current_sig == ancestor_sig:
@@ -166,14 +229,16 @@ def _merge_property_children(
                 item_key=(*item_key, *property_key),
             )
             continue
-        _conflict(
-            report,
+        _apply_extension_property(
+            current_parent,
+            current_prop,
+            extension_prop,
             rel_path=rel_path,
+            report=report,
+            stats=stats,
             item_key=item_key,
             property_key=property_key,
-            ancestor=ancestor_sig if ancestor_prop is not None else None,
-            current=current_sig,
-            extension=extension_sig,
+            reason="extension_command_interface_property_wins",
         )
 
 
