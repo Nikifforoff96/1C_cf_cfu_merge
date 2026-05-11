@@ -48,10 +48,10 @@
     Формат файлов: Hierarchical или Plain (по умолчанию Hierarchical)
 
 .EXAMPLE
-    .\db-load-xml.ps1 -V8Path "C:\Program Files\1cv8\8.3.27.1644\bin" -InfoBaseServer "<server-host>" -InfoBaseRef "<infobase-ref>" -ConfigDir "C:\path\to\config-dump" -Mode Full
+    .\db-load-xml.ps1 -V8Path "C:\Program Files\1cv8\8.3.27.1644\bin" -InfoBaseServer "<server-host>" -InfoBaseRef "<infobase-ref>" -UserName "<user-name>" -ConfigDir "C:\path\to\config-dump" -Mode Full
 
 .EXAMPLE
-    .\db-load-xml.ps1 -V8Path "C:\Program Files\1cv8\8.3.27.1644\bin" -InfoBaseServer "<server-host>" -InfoBaseRef "<infobase-ref>" -ConfigDir "C:\path\to\config-dump" -Mode Partial -Files "Catalogs/Номенклатура.xml,Catalogs/Номенклатура/Ext/ObjectModule.bsl"
+    .\db-load-xml.ps1 -V8Path "C:\Program Files\1cv8\8.3.27.1644\bin" -InfoBaseServer "<server-host>" -InfoBaseRef "<infobase-ref>" -UserName "<user-name>" -ConfigDir "C:\path\to\config-dump" -Mode Partial -Files "Catalogs/Номенклатура.xml,Catalogs/Номенклатура/Ext/ObjectModule.bsl"
 #>
 
 [CmdletBinding()]

@@ -237,7 +237,7 @@ def merge(cfg: MergeConfig) -> MergeReport:
     validate_config_dump_info(cfg.out_dir, cfg.cf_dir / "ConfigDumpInfo.xml", cfg.cfu_dir / "ConfigDumpInfo.xml", ext_registry, report)
 
     if cfg.validate_xml:
-        validate_xml_tree(cfg.out_dir, report)
+        validate_xml_tree(cfg.out_dir, report, base_dir=cfg.cf_dir)
     if cfg.validate_bsl:
         validate_bsl_tree(cfg.out_dir, report)
     if cfg.validate_1c:

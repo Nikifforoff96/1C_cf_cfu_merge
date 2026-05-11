@@ -36,10 +36,10 @@
     Выгрузить все расширения
 
 .EXAMPLE
-    .\db-dump-cf.ps1 -V8Path "C:\Program Files\1cv8\8.3.27.1644\bin" -InfoBaseServer "<server-host>" -InfoBaseRef "<infobase-ref>" -OutputFile "C:\path\to\out\config.cf"
+    .\db-dump-cf.ps1 -V8Path "C:\Program Files\1cv8\8.3.27.1644\bin" -InfoBaseServer "<server-host>" -InfoBaseRef "<infobase-ref>" -UserName "<user-name>" -OutputFile "C:\path\to\out\config.cf"
 
 .EXAMPLE
-    .\db-dump-cf.ps1 -V8Path "C:\Program Files\1cv8\8.3.27.1644\bin" -InfoBaseServer "<server-host>" -InfoBaseRef "<infobase-ref>" -OutputFile "C:\path\to\out\extension.cfe" -Extension "МоёРасширение"
+    .\db-dump-cf.ps1 -V8Path "C:\Program Files\1cv8\8.3.27.1644\bin" -InfoBaseServer "<server-host>" -InfoBaseRef "<infobase-ref>" -UserName "<user-name>" -OutputFile "C:\path\to\out\extension.cfe" -Extension "МоёРасширение"
 #>
 
 [CmdletBinding()]

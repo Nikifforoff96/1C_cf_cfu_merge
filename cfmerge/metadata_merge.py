@@ -99,6 +99,10 @@ def merge_configuration(
     all_items = [clone_element(item) for item in children(base_child)] + added
     order = {name: idx for idx, name in enumerate(CHILD_TYPE_ORDER)}
     all_items.sort(key=lambda e: (order.get(local_name(e.tag), 999), (e.text or "").lower()))
+    if not added:
+        if base_path.resolve() != out_path.resolve():
+            copy_file(base_path, out_path)
+        return
     if added:
         base_text = read_text(base_path)
         spans = span_map(base_text)
@@ -109,14 +113,13 @@ def merge_configuration(
             write_patched_like_source(out_path, base_path, base_text)
         else:
             write_xml(out_path, base_tree, NS_MD)
-    if added:
-        report.summary["files_changed"] += 1
-        report.objects["modified"].append({
-            "type": "Configuration",
-            "name": child_text(base_cfg, ["Properties", "Name"]),
-            "path": "Configuration.xml",
-            "strategy": "merge_configuration_child_objects",
-        })
+    report.summary["files_changed"] += 1
+    report.objects["modified"].append({
+        "type": "Configuration",
+        "name": child_text(base_cfg, ["Properties", "Name"]),
+        "path": "Configuration.xml",
+        "strategy": "merge_configuration_child_objects",
+    })
 
 
 def _child_key_map(parent: ET.Element) -> dict[tuple[str, str], ET.Element]:

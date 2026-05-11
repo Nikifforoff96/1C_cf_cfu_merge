@@ -1,4 +1,4 @@
-# 1C CLI Tools
+﻿# 1C CLI Tools
 
 This directory contains helper scripts for local 1C:Enterprise Designer validation.
 
@@ -16,7 +16,8 @@ or:
 Srvr="<server-host>";Ref="<infobase-ref>"
 ```
 
-If the test infobase has no users, do not pass `-UserName` or `-Password`.
+If the test infobase requires authentication, pass `-UserName` and optionally `-Password`.
+For the dedicated server test infobase of this project, use `-UserName "Администратор"` and do not pass `-Password` while the password is empty.
 
 Default platform:
 
@@ -41,17 +42,32 @@ powershell.exe -NoProfile -File ".\tools\1c-cf-manage\scripts\cf-validate.ps1" `
 powershell.exe -NoProfile -File ".\tools\1c-db-ops\scripts\db-load-xml.ps1" `
   -V8Path "C:\Program Files\1cv8\8.3.27.1644\bin" `
   -InfoBasePath "C:\path\to\test-infobase" `
+  -UserName "<user-name>" `
   -ConfigDir "<config_dump_dir>" `
   -Mode Full
 
 powershell.exe -NoProfile -File ".\tools\1c-db-ops\scripts\db-update.ps1" `
   -V8Path "C:\Program Files\1cv8\8.3.27.1644\bin" `
-  -InfoBasePath "C:\path\to\test-infobase"
+  -InfoBasePath "C:\path\to\test-infobase" `
+  -UserName "<user-name>"
 
 powershell.exe -NoProfile -File ".\tools\1c-db-ops\scripts\db-dump-cf.ps1" `
   -V8Path "C:\Program Files\1cv8\8.3.27.1644\bin" `
   -InfoBasePath "C:\path\to\test-infobase" `
+  -UserName "<user-name>" `
   -OutputFile "<output_cf_path>"
+```
+
+Server example for this project:
+
+```powershell
+powershell.exe -NoProfile -File ".\tools\1c-db-ops\scripts\db-load-xml.ps1" `
+  -V8Path "C:\Program Files\1cv8\8.3.27.1644\bin" `
+  -InfoBaseServer "<server-host>" `
+  -InfoBaseRef "<infobase-ref>" `
+  -UserName "Администратор" `
+  -ConfigDir "<config_dump_dir>" `
+  -Mode Full
 ```
 
 Use `db-create.ps1` only when a new test infobase is needed or the current one is broken:

@@ -53,6 +53,18 @@ def _common_module(name: str, uuid: str, adopted: bool = False) -> str:
 '''
 
 
+def _simple_metadata(tag: str, name: str, uuid: str) -> str:
+    return f'''<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="{MD}">
+\t<{tag} uuid="{uuid}">
+\t\t<Properties>
+\t\t\t<Name>{name}</Name>
+\t\t</Properties>
+\t</{tag}>
+</MetaDataObject>
+'''
+
+
 def _data_processor(name: str, uuid: str) -> str:
     return f'''<?xml version="1.0" encoding="UTF-8"?>
 <MetaDataObject xmlns="{MD}">
@@ -62,6 +74,30 @@ def _data_processor(name: str, uuid: str) -> str:
 \t\t</Properties>
 \t</DataProcessor>
 </MetaDataObject>
+'''
+
+
+def _config_with_props(name: str, children: str, extra_props: str = "") -> str:
+    return f'''<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="{MD}">
+\t<Configuration uuid="cfg-{name}">
+\t\t<Properties>
+\t\t\t<Name>{name}</Name>
+{extra_props}\t\t</Properties>
+\t\t<ChildObjects>
+{children}\t\t</ChildObjects>
+\t</Configuration>
+</MetaDataObject>
+'''
+
+
+def _role_rights() -> str:
+    return '''<?xml version="1.0" encoding="UTF-8"?>
+<Rights xmlns="http://v8.1c.ru/8.2/roles" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="Rights" version="2.20">
+\t<setForNewObjects>true</setForNewObjects>
+\t<setForAttributesByDefault>true</setForAttributesByDefault>
+\t<independentRightsOfChildObjects>false</independentRightsOfChildObjects>
+</Rights>
 '''
 
 
@@ -144,6 +180,38 @@ def test_configuration_merge_uses_xml_name_when_physical_filename_is_escaped(tmp
     assert report.objects["added"][0]["path"] == "CommonModules/#U043e#U043c#U041d#U043e#U0432#U044b#U0439.xml"
 
 
+def test_configuration_merge_writes_base_when_extension_has_no_new_children(tmp_path: Path) -> None:
+    cf = tmp_path / "cf"
+    cfu = tmp_path / "cfu"
+    out = tmp_path / "out.xml"
+    _write(
+        cf / "Configuration.xml",
+        _config_with_props(
+            "Base",
+            "\t\t\t<Role>FullRights</Role>\n\t\t\t<CommonModule>BaseModule</CommonModule>\n",
+            "\t\t\t<Vendor>BaseVendor</Vendor>\n",
+        ),
+    )
+    _write(cf / "Roles" / "FullRights.xml", _simple_metadata("Role", "FullRights", "role-id"))
+    _write(cf / "CommonModules" / "BaseModule.xml", _common_module("BaseModule", "base-id"))
+    _write(
+        cfu / "Configuration.xml",
+        _config_with_props(
+            "Ext",
+            "\t\t\t<CommonModule>BaseModule</CommonModule>\n",
+            "\t\t\t<ObjectBelonging>Adopted</ObjectBelonging>\n\t\t\t<NamePrefix>EXT_</NamePrefix>\n",
+        ),
+    )
+
+    report = MergeReport()
+    merge_configuration(cf / "Configuration.xml", cfu / "Configuration.xml", out, report)
+
+    text = out.read_text(encoding="utf-8-sig")
+    assert "<Role>FullRights</Role>" in text
+    assert "<Vendor>BaseVendor</Vendor>" in text
+    assert "NamePrefix" not in text
+
+
 def test_config_dump_info_preserves_base_ids_and_adds_native_extension_objects(tmp_path: Path) -> None:
     out = tmp_path / "merged"
     _write(out / "Configuration.xml", _config("Base", "\t\t\t<CommonModule>Общий</CommonModule>\n\t\t\t<CommonModule>омНовый</CommonModule>\n\t\t\t<DataProcessor>омОбработка</DataProcessor>\n"))
@@ -211,7 +279,73 @@ def test_dry_run_writes_reports_and_does_not_touch_out(tmp_path: Path) -> None:
     assert report.summary["files_added"] >= 1
 
 
-def test_form_property_delta_is_reported_when_not_materialized(tmp_path: Path) -> None:
+def test_merge_preserves_base_roles_and_base_only_files_with_adopted_extension_root(tmp_path: Path) -> None:
+    cf = tmp_path / "cf"
+    cfu = tmp_path / "cfu"
+    out = tmp_path / "merged"
+    report_path = tmp_path / "merge.json"
+    human_path = tmp_path / "merge.txt"
+
+    _write(
+        cf / "Configuration.xml",
+        _config_with_props(
+            "Base",
+            "\t\t\t<Role>FullRights</Role>\n\t\t\t<CommonPicture>Logo</CommonPicture>\n\t\t\t<CommonModule>BaseModule</CommonModule>\n",
+            "\t\t\t<Vendor>BaseVendor</Vendor>\n",
+        ),
+    )
+    _write(cf / "Roles" / "FullRights.xml", _simple_metadata("Role", "FullRights", "role-id"))
+    _write(cf / "Roles" / "FullRights" / "Ext" / "Rights.xml", _role_rights())
+    _write(cf / "CommonPictures" / "Logo.xml", _simple_metadata("CommonPicture", "Logo", "logo-id"))
+    _write(cf / "CommonModules" / "BaseModule.xml", _common_module("BaseModule", "base-id"))
+    _write(cf / "ConfigDumpInfo.xml", _dump({
+        "Configuration.Base": "cfg-base",
+        "Role.FullRights": "role-id",
+        "CommonPicture.Logo": "logo-id",
+        "CommonModule.BaseModule": "base-id",
+    }))
+    _write(cf / "\u041e\u0442\u0447\u0435\u0442\u041f\u043e\u041a\u043e\u043d\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u0438.txt", _report("Base", []))
+
+    _write(
+        cfu / "Configuration.xml",
+        _config_with_props(
+            "Ext",
+            "\t\t\t<CommonModule>ExtModule</CommonModule>\n",
+            "\t\t\t<ObjectBelonging>Adopted</ObjectBelonging>\n\t\t\t<ConfigurationExtensionPurpose>Customization</ConfigurationExtensionPurpose>\n\t\t\t<NamePrefix>EXT_</NamePrefix>\n",
+        ),
+    )
+    _write(cfu / "CommonModules" / "ExtModule.xml", _common_module("ExtModule", "ext-id"))
+    _write(cfu / "ConfigDumpInfo.xml", _dump({
+        "CommonModule.ExtModule": "ext-id",
+    }))
+    _write(cfu / "\u041e\u0442\u0447\u0435\u0442\u041f\u043e\u041a\u043e\u043d\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u0438.txt", _report("Ext", [], own=False))
+
+    report = merge(MergeConfig(
+        cf_dir=cf,
+        cfu_dir=cfu,
+        out_dir=out,
+        report_path=report_path,
+        human_report_path=human_path,
+        force=True,
+        validate_xml=True,
+    ))
+
+    assert not report.conflicts
+    assert (out / "Roles" / "FullRights.xml").exists()
+    assert (out / "Roles" / "FullRights" / "Ext" / "Rights.xml").exists()
+    assert (out / "CommonPictures" / "Logo.xml").exists()
+    config_text = (out / "Configuration.xml").read_text(encoding="utf-8-sig")
+    assert "<Role>FullRights</Role>" in config_text
+    assert "<CommonPicture>Logo</CommonPicture>" in config_text
+    assert "<CommonModule>ExtModule</CommonModule>" in config_text
+    assert "<Vendor>BaseVendor</Vendor>" in config_text
+    assert "ObjectBelonging" not in config_text
+    assert "NamePrefix" not in config_text
+    assert report.validation["base_configuration_children_preserved"] == "passed"
+    assert report.validation["base_files_preserved"] == "passed"
+
+
+def test_form_property_delta_is_applied_semantically(tmp_path: Path) -> None:
     base = tmp_path / "base.xml"
     ext = tmp_path / "ext.xml"
     out = tmp_path / "out.xml"
@@ -244,8 +378,8 @@ def test_form_property_delta_is_reported_when_not_materialized(tmp_path: Path) -
     report = MergeReport()
     merge_form_visual(base, ext, out, "Form.xml", report)
 
-    assert any(w.code == "FORM_PROPERTY_DELTA_NOT_APPLIED" for w in report.warnings)
-    assert "<Title>Base</Title>" in out.read_text(encoding="utf-8-sig")
+    assert not report.conflicts
+    assert "<Title>Ext</Title>" in out.read_text(encoding="utf-8-sig")
 
 
 def test_validators_catch_plain_result_artifacts_without_false_string_hits(tmp_path: Path) -> None:

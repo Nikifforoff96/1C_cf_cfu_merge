@@ -42,10 +42,10 @@
     Предупреждения считать ошибками
 
 .EXAMPLE
-    .\db-update.ps1 -V8Path "C:\Program Files\1cv8\8.3.27.1644\bin" -InfoBaseServer "<server-host>" -InfoBaseRef "<infobase-ref>"
+    .\db-update.ps1 -V8Path "C:\Program Files\1cv8\8.3.27.1644\bin" -InfoBaseServer "<server-host>" -InfoBaseRef "<infobase-ref>" -UserName "<user-name>"
 
 .EXAMPLE
-    .\db-update.ps1 -V8Path "C:\Program Files\1cv8\8.3.27.1644\bin" -InfoBaseServer "<server-host>" -InfoBaseRef "<infobase-ref>" -Dynamic "+" -Extension "МоёРасширение"
+    .\db-update.ps1 -V8Path "C:\Program Files\1cv8\8.3.27.1644\bin" -InfoBaseServer "<server-host>" -InfoBaseRef "<infobase-ref>" -UserName "<user-name>" -Dynamic "+" -Extension "МоёРасширение"
 #>
 
 [CmdletBinding()]

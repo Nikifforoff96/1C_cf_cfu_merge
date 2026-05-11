@@ -6,12 +6,26 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from .classifier import TYPE_TO_DIR
+from .form_validator import validate_form_result
+from .io_utils import normalize_rel
 from .models import MergeConfig, MergeReport
 from .object_registry import build_object_registry
 from .xml_utils import child, children, local_name, parse_xml
 
 
-def validate_xml_tree(out_dir: Path, report: MergeReport) -> None:
+def _configuration_child_refs(cfg_path: Path) -> set[tuple[str, str]]:
+    tree = parse_xml(cfg_path)
+    cfg_obj = next((item for item in list(tree.getroot()) if isinstance(item.tag, str)), None)
+    child_objects = child(cfg_obj, "ChildObjects") if cfg_obj is not None else None
+    refs: set[tuple[str, str]] = set()
+    if child_objects is None:
+        return refs
+    for item in children(child_objects):
+        refs.add((local_name(item.tag), (item.text or "").strip()))
+    return refs
+
+
+def validate_xml_tree(out_dir: Path, report: MergeReport, base_dir: Path | None = None) -> None:
     errors: list[str] = []
     prefix_errors: list[str] = []
     calltype_errors: list[str] = []
@@ -44,6 +58,8 @@ def validate_xml_tree(out_dir: Path, report: MergeReport) -> None:
             calltype_errors.append(str(path))
         if path.name == "Form.xml" and re.search(r"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?BaseForm\b", text):
             baseform_errors.append(str(path))
+        if path.name == "Form.xml":
+            validate_form_result(path, report)
         if path.name not in {"ConfigDumpInfo.xml"}:
             if (
                 re.search(r"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?ObjectBelonging>\s*Adopted\s*</", text)
@@ -87,18 +103,12 @@ def validate_xml_tree(out_dir: Path, report: MergeReport) -> None:
     cfg_path = out_dir / "Configuration.xml"
     if cfg_path.exists():
         try:
-            tree = parse_xml(cfg_path)
-            cfg_obj = next((item for item in list(tree.getroot()) if isinstance(item.tag, str)), None)
             registry = build_object_registry(out_dir)
-            child_objects = child(cfg_obj, "ChildObjects") if cfg_obj is not None else None
-            if child_objects is not None:
-                for item in children(child_objects):
-                    typ = local_name(item.tag)
-                    name = (item.text or "").strip()
-                    if not name or typ not in TYPE_TO_DIR:
-                        continue
-                    if registry.find(typ, name) is None:
-                        missing_refs.append(f"{typ}.{name}")
+            for typ, name in _configuration_child_refs(cfg_path):
+                if not name or typ not in TYPE_TO_DIR:
+                    continue
+                if registry.find(typ, name) is None:
+                    missing_refs.append(f"{typ}.{name}")
         except Exception as exc:
             missing_refs.append(f"Configuration.xml parse/reference check failed: {exc}")
     if missing_refs:
@@ -107,6 +117,37 @@ def validate_xml_tree(out_dir: Path, report: MergeReport) -> None:
             report.add_conflict("CONFIGURATION_CHILD_OBJECT_FILE_MISSING", "Configuration.xml", ref)
     else:
         report.validation["configuration_child_references"] = "passed"
+
+    base_missing_refs: list[str] = []
+    base_missing_files: list[str] = []
+    if base_dir is not None and base_dir.exists():
+        base_cfg_path = base_dir / "Configuration.xml"
+        if base_cfg_path.exists() and cfg_path.exists():
+            try:
+                for typ, name in sorted(_configuration_child_refs(base_cfg_path) - _configuration_child_refs(cfg_path)):
+                    base_missing_refs.append(f"{typ}.{name}")
+            except Exception as exc:
+                base_missing_refs.append(f"Configuration.xml base-reference compare failed: {exc}")
+        for path in sorted(base_dir.rglob("*")):
+            if path.is_dir():
+                continue
+            rel = normalize_rel(path.relative_to(base_dir))
+            if not (out_dir / rel).exists():
+                base_missing_files.append(rel)
+
+    if base_missing_refs:
+        report.validation["base_configuration_children_preserved"] = "failed"
+        for ref in base_missing_refs[:50]:
+            report.add_conflict("CONFIGURATION_BASE_CHILD_REFERENCE_LOST", "Configuration.xml", ref)
+    else:
+        report.validation["base_configuration_children_preserved"] = "passed"
+
+    if base_missing_files:
+        report.validation["base_files_preserved"] = "failed"
+        for rel in base_missing_files[:50]:
+            report.add_conflict("BASE_FILE_MISSING_IN_MERGE_RESULT", rel, rel)
+    else:
+        report.validation["base_files_preserved"] = "passed"
 
 
 def validate_bsl_tree(out_dir: Path, report: MergeReport) -> None:
