@@ -5,8 +5,12 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
-build/
-dist/
+build/*
+!build/windows/
+!build/windows/**
+dist/*
+!dist/
+!dist/1C_cf_cfu_merge.exe
 *.egg-info/
 
 # Local agent/project instructions and private runtime configuration

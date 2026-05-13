@@ -844,12 +844,33 @@ def test_form_validator_accepts_common_datapath_patterns(tmp_path: Path) -> None
   <DataPath>ПриложенияРезультата[1].ИндексКартинки</DataPath>
   <DataPath>1/0:6727aade-d9bc-4506-86e0-9c74ef590633</DataPath>
   <DataPath>1/-3</DataPath>
+  <DataPath>12</DataPath>
 """,
         ),
     )
 
     report = MergeReport()
     validate_form_result(form_path, report)
+
+    assert not [item for item in report.conflicts if item.code == "FORM_DATAPATH_UNRESOLVED"]
+
+
+def test_form_validator_ignores_preexisting_unresolved_datapath(tmp_path: Path) -> None:
+    base = tmp_path / "base.xml"
+    result = tmp_path / "result.xml"
+    form_text = _form(
+        body="""
+  <ChildItems>
+    <InputField name="Поле" id="1"><DataPath>СтарыйБитыйПуть.Поле</DataPath></InputField>
+  </ChildItems>
+  <Attributes />
+""",
+    )
+    _write(base, form_text)
+    _write(result, form_text)
+    report = MergeReport()
+
+    validate_form_result(result, report, base_form_path=base)
 
     assert not [item for item in report.conflicts if item.code == "FORM_DATAPATH_UNRESOLVED"]
 

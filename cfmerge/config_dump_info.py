@@ -5,8 +5,9 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from .classifier import DIR_TO_TYPE
+from .io_utils import normalize_rel
 from .metadata_merge import metadata_full_name
-from .models import MergeReport
+from .models import FileRecord, MergeReport
 from .object_registry import ObjectRegistry
 from .xml_utils import NS_DUMP, child, children, local_name, parse_xml, write_xml
 
@@ -68,7 +69,13 @@ def _external_xml_suffix(path: Path) -> str | None:
     return None
 
 
-def regenerate_config_dump_info(out_dir: Path, base_info: Path | None, ext_info: Path | None, report: MergeReport) -> None:
+def regenerate_config_dump_info(
+    out_dir: Path,
+    base_info: Path | None,
+    ext_info: Path | None,
+    report: MergeReport,
+    base_manifest: dict[str, FileRecord] | None = None,
+) -> None:
     base_known = _read_existing_entries(base_info) if base_info is not None else {}
     ext_known = _read_existing_entries(ext_info) if ext_info is not None else {}
     root = ET.Element(f"{{{NS_DUMP}}}ConfigDumpInfo", {
@@ -94,39 +101,67 @@ def regenerate_config_dump_info(out_dir: Path, base_info: Path | None, ext_info:
     def _upsert(full_name: str, default_ident: str, version: str | None) -> None:
         entry_by_name[full_name] = _metadata_element(full_name, _identity_for(full_name, default_ident), version)
 
+    def _unchanged_base_record(path: Path) -> FileRecord | None:
+        if base_manifest is None:
+            return None
+        try:
+            rel = normalize_rel(path.relative_to(out_dir))
+            base_record = base_manifest.get(rel)
+            current = path.stat()
+        except (OSError, ValueError):
+            return None
+        if base_record is not None and base_record.size == current.st_size and base_record.mtime_ns == current.st_mtime_ns:
+            return base_record
+        return None
+
+    def _metadata_full_name_for_result(path: Path) -> tuple[str | None, str | None, str | None]:
+        base_record = _unchanged_base_record(path)
+        if base_record is not None and base_record.object_ref is not None:
+            ref = base_record.object_ref
+            return ref.metadata_type, ref.xml_name, ref.uuid
+        return metadata_full_name(path)
+
+    def _version_for_result(full_name: str, path: Path) -> str | None:
+        if full_name in base_known:
+            base_record = _unchanged_base_record(path)
+            old_version = base_known[full_name][1]
+            if old_version and base_record is not None:
+                return old_version
+        return _version_for(path)
+
     cfg_xml = out_dir / "Configuration.xml"
     root_typ, root_name, root_uuid = metadata_full_name(cfg_xml)
     if root_typ == "Configuration" and root_name and root_uuid:
         full = f"Configuration.{root_name}"
-        _upsert(full, root_uuid, _version_for(cfg_xml))
+        _upsert(full, root_uuid, _version_for_result(full, cfg_xml))
 
     for dir_path in sorted([p for p in out_dir.iterdir() if p.is_dir()], key=lambda p: p.name.lower()):
         obj_type = DIR_TO_TYPE.get(dir_path.name)
         if not obj_type:
             continue
         for xml_path in sorted(dir_path.glob("*.xml"), key=lambda p: p.name.lower()):
-            obj_typ, obj_name, obj_uuid = metadata_full_name(xml_path)
+            obj_typ, obj_name, obj_uuid = _metadata_full_name_for_result(xml_path)
             if not obj_name or not obj_uuid:
                 continue
             full = f"{obj_type}.{obj_name}"
             object_uuid[(dir_path.name, obj_name)] = obj_uuid
             object_full[(dir_path.name, obj_name)] = full
-            _upsert(full, obj_uuid, _version_for(xml_path))
+            _upsert(full, obj_uuid, _version_for_result(full, xml_path))
 
             obj_dir = dir_path / xml_path.stem
             forms_dir = obj_dir / "Forms"
             if forms_dir.exists():
                 for form_xml in sorted(forms_dir.glob("*.xml"), key=lambda p: p.name.lower()):
-                    ftyp, fname, fuuid = metadata_full_name(form_xml)
+                    ftyp, fname, fuuid = _metadata_full_name_for_result(form_xml)
                     if not fname or not fuuid:
                         fname = form_xml.stem
                         fuuid = _identity_for(f"{full}.Form.{fname}", f"{obj_uuid}.{fname}")
                     form_full = f"{full}.Form.{fname}"
-                    _upsert(form_full, fuuid, _version_for(form_xml))
+                    _upsert(form_full, fuuid, _version_for_result(form_full, form_xml))
                     visual = forms_dir / form_xml.stem / "Ext" / "Form.xml"
                     if visual.exists():
                         visual_full = f"{form_full}.Form"
-                        _upsert(visual_full, f"{_identity_for(form_full, fuuid)}.0", _version_for(visual))
+                        _upsert(visual_full, f"{_identity_for(form_full, fuuid)}.0", _version_for_result(visual_full, visual))
 
             ext_dir = obj_dir / "Ext"
             if ext_dir.exists():
@@ -135,23 +170,24 @@ def regenerate_config_dump_info(out_dir: Path, base_info: Path | None, ext_info:
                     if not suffix:
                         continue
                     module_full = f"{full}.{suffix}"
-                    _upsert(module_full, f"{obj_uuid}.0", _version_for(bsl))
+                    _upsert(module_full, f"{obj_uuid}.0", _version_for_result(module_full, bsl))
 
             for nested_xml in sorted(obj_dir.rglob("*.xml"), key=lambda p: str(p.relative_to(obj_dir)).lower()):
                 rel_parts = nested_xml.relative_to(obj_dir).parts
                 if not rel_parts or rel_parts[0] in {"Forms", "Ext"} or "Ext" in rel_parts:
                     continue
-                child_typ, child_name, child_uuid = metadata_full_name(nested_xml)
+                child_typ, child_name, child_uuid = _metadata_full_name_for_result(nested_xml)
                 if not child_typ or not child_name or not child_uuid:
                     continue
                 child_full = f"{full}.{child_typ}.{child_name}"
-                _upsert(child_full, child_uuid, _version_for(nested_xml))
+                _upsert(child_full, child_uuid, _version_for_result(child_full, nested_xml))
                 child_ext_dir = nested_xml.parent / nested_xml.stem / "Ext"
                 if child_ext_dir.exists():
                     for ext_xml in sorted(child_ext_dir.glob("*.xml"), key=lambda p: p.name.lower()):
                         suffix = _external_xml_suffix(ext_xml)
                         if suffix:
-                            _upsert(f"{child_full}.{suffix}", f"{child_uuid}.0", _version_for(ext_xml))
+                            ext_full = f"{child_full}.{suffix}"
+                            _upsert(ext_full, f"{child_uuid}.0", _version_for_result(ext_full, ext_xml))
 
     root_ext = out_dir / "Ext"
     if root_ext.exists():
@@ -160,7 +196,7 @@ def regenerate_config_dump_info(out_dir: Path, base_info: Path | None, ext_info:
             if not suffix or not root_name or not root_uuid:
                 continue
             full = f"Configuration.{root_name}.{suffix}"
-            _upsert(full, f"{root_uuid}.0", _version_for(bsl))
+            _upsert(full, f"{root_uuid}.0", _version_for_result(full, bsl))
 
     if root_name:
         root_prefix = f"Configuration.{root_name}"

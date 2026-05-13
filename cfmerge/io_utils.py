@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 import hashlib
 import os
 import shutil
@@ -72,7 +73,8 @@ def copy_file(src: Path, dst: Path) -> None:
     shutil.copy2(src, dst)
 
 
-def copy_tree_contents(src: Path, dst: Path) -> None:
+def copy_tree_contents(src: Path, dst: Path, progress_callback: Callable[[int, str], None] | None = None) -> None:
+    copied = 0
     for path in sorted(src.rglob("*"), key=lambda p: str(p.relative_to(src)).lower()):
         rel = path.relative_to(src)
         target = dst / rel
@@ -80,6 +82,9 @@ def copy_tree_contents(src: Path, dst: Path) -> None:
             target.mkdir(parents=True, exist_ok=True)
         else:
             copy_file(path, target)
+            copied += 1
+            if progress_callback is not None:
+                progress_callback(copied, normalize_rel(rel))
 
 
 def prepare_output_dir(out_dir: Path, force: bool, backup: bool) -> None:

@@ -24,9 +24,11 @@ classifiers = [
 
 [project.scripts]
 cfmerge = "cfmerge.cli:main"
+cfmerge-gui = "cfmerge.app:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+build = ["pyinstaller>=6.19"]
 
 [project.urls]
 Homepage = "https://github.com/Nikifforoff96/1C_cf_cfu_merge"

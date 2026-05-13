@@ -3,13 +3,15 @@ from __future__ import annotations
 import subprocess
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from .classifier import TYPE_TO_DIR
+from .external_command_interface import validate_command_interface_resource
 from .form_validator import validate_form_result
 from .io_utils import normalize_rel
-from .models import MergeConfig, MergeReport
-from .object_registry import build_object_registry
+from .models import FileRecord, MergeConfig, MergeReport
+from .object_registry import ObjectRegistry, build_object_registry
 from .xml_utils import child, children, local_name, parse_xml
 
 
@@ -25,56 +27,103 @@ def _configuration_child_refs(cfg_path: Path) -> set[tuple[str, str]]:
     return refs
 
 
-def validate_xml_tree(out_dir: Path, report: MergeReport, base_dir: Path | None = None) -> None:
+def _parse_xml_bytes(data: bytes) -> ET.ElementTree:
+    parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+    return ET.ElementTree(ET.fromstring(data, parser=parser))
+
+
+def _is_unchanged_base_copy(path: Path, out_dir: Path, base_manifest: dict[str, FileRecord] | None) -> bool:
+    if base_manifest is None:
+        return False
+    try:
+        rel = normalize_rel(path.relative_to(out_dir))
+        base_record = base_manifest.get(rel)
+        current = path.stat()
+    except (OSError, ValueError):
+        return False
+    return base_record is not None and base_record.size == current.st_size and base_record.mtime_ns == current.st_mtime_ns
+
+
+def validate_xml_tree(
+    out_dir: Path,
+    report: MergeReport,
+    base_dir: Path | None = None,
+    registry: ObjectRegistry | None = None,
+    base_manifest: dict[str, FileRecord] | None = None,
+    xml_paths: Iterable[Path] | None = None,
+    progress_callback: Callable[[int, int, Path], None] | None = None,
+) -> None:
     errors: list[str] = []
     prefix_errors: list[str] = []
     calltype_errors: list[str] = []
     baseform_errors: list[str] = []
     adopted_leaks: list[str] = []
-    for path in out_dir.rglob("*.xml"):
-        text = path.read_text(encoding="utf-8-sig", errors="ignore")
+    registry = registry or build_object_registry(out_dir)
+    paths = (
+        sorted(xml_paths, key=lambda p: normalize_rel(p.relative_to(out_dir)).lower())
+        if xml_paths is not None
+        else sorted(out_dir.rglob("*.xml"), key=lambda p: normalize_rel(p.relative_to(out_dir)).lower())
+    )
+    skipped_unchanged_base = 0
+    total_paths = len(paths)
+    for index, path in enumerate(paths, 1):
         try:
-            ET.parse(path)
-        except Exception as exc:
-            errors.append(f"{path}: {exc}")
-            continue
-        declared = set(re.findall(r"xmlns:([A-Za-z_][A-Za-z0-9_.-]*)=", text))
-        values = []
-        for match in re.finditer(r'\s([A-Za-z_][A-Za-z0-9_.:-]*)="([^"]*)"', text):
-            attr_name = match.group(1)
-            if attr_name in {"xsi:type", "type"} or attr_name.endswith(":type"):
-                values.append(match.group(2))
-        values.extend(re.findall(r"<(?:[^:<>]+:)?Type(?:\s[^>]*)?>([^<>]+:[^<>]+)</(?:[^:<>]+:)?Type>", text))
-        refs = set()
-        for value in values:
-            for ref in re.finditer(r"(?<![A-Za-z0-9_.-])([A-Za-z_][A-Za-z0-9_.-]*):[A-Za-z_А-Яа-яЁё]", value):
-                prefix = ref.group(1)
-                if prefix not in {"http", "https", "file", "mailto"}:
-                    refs.add(prefix)
-        missing = sorted(refs - declared)
-        if missing:
-            prefix_errors.append(f"{path}: не объявлены QName-префиксы {', '.join(missing)}")
-        if path.name == "Form.xml" and 'callType="' in text:
-            calltype_errors.append(str(path))
-        if path.name == "Form.xml" and re.search(r"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?BaseForm\b", text):
-            baseform_errors.append(str(path))
-        if path.name == "Form.xml":
-            base_form_path = None
-            if base_dir is not None and base_dir.exists():
-                try:
-                    base_form_path = base_dir / path.relative_to(out_dir)
-                except ValueError:
-                    base_form_path = None
-            validate_form_result(path, report, base_form_path=base_form_path)
-        if path.name not in {"ConfigDumpInfo.xml"}:
-            if (
-                re.search(r"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?ObjectBelonging>\s*Adopted\s*</", text)
-                or re.search(r"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?ExtendedConfigurationObject\b", text)
-                or re.search(r"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?ConfigurationExtensionPurpose\b", text)
-                or re.search(r"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?NamePrefix>\s*[^<\s]+", text)
-                or re.search(r'\bxsi:type="(?:[A-Za-z_][A-Za-z0-9_.-]*:)?ExtendedProperty"', text)
-            ):
-                adopted_leaks.append(str(path))
+            if _is_unchanged_base_copy(path, out_dir, base_manifest):
+                skipped_unchanged_base += 1
+                continue
+            try:
+                data = path.read_bytes()
+            except OSError as exc:
+                errors.append(f"{path}: {exc}")
+                continue
+            text = data.decode("utf-8-sig", errors="ignore")
+            try:
+                _parse_xml_bytes(data)
+            except Exception as exc:
+                errors.append(f"{path}: {exc}")
+                continue
+            declared = set(re.findall(r"xmlns:([A-Za-z_][A-Za-z0-9_.-]*)=", text))
+            values = []
+            for match in re.finditer(r'\s([A-Za-z_][A-Za-z0-9_.:-]*)="([^"]*)"', text):
+                attr_name = match.group(1)
+                if attr_name in {"xsi:type", "type"} or attr_name.endswith(":type"):
+                    values.append(match.group(2))
+            values.extend(re.findall(r"<(?:[^:<>]+:)?Type(?:\s[^>]*)?>([^<>]+:[^<>]+)</(?:[^:<>]+:)?Type>", text))
+            refs = set()
+            for value in values:
+                for ref in re.finditer(r"(?<![A-Za-z0-9_.-])([A-Za-z_][A-Za-z0-9_.-]*):[A-Za-z_А-Яа-яЁё]", value):
+                    prefix = ref.group(1)
+                    if prefix not in {"http", "https", "file", "mailto"}:
+                        refs.add(prefix)
+            missing = sorted(refs - declared)
+            if missing:
+                prefix_errors.append(f"{path}: не объявлены QName-префиксы {', '.join(missing)}")
+            if path.name == "Form.xml" and 'callType="' in text:
+                calltype_errors.append(str(path))
+            if path.name == "Form.xml" and re.search(r"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?BaseForm\b", text):
+                baseform_errors.append(str(path))
+            if path.name == "Form.xml":
+                base_form_path = None
+                if base_dir is not None and base_dir.exists():
+                    try:
+                        base_form_path = base_dir / path.relative_to(out_dir)
+                    except ValueError:
+                        base_form_path = None
+                validate_form_result(path, report, base_form_path=base_form_path)
+            if path.name == "CommandInterface.xml":
+                validate_command_interface_resource(path, out_dir, registry, report)
+            if path.name not in {"ConfigDumpInfo.xml"}:
+                if (
+                    re.search(r"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?ObjectBelonging>\s*Adopted\s*</", text)
+                    or re.search(r"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?ExtendedConfigurationObject\b", text)
+                    or re.search(r"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?ConfigurationExtensionPurpose\b", text)
+                    or re.search(r"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?NamePrefix>\s*[^<\s]+", text)
+                    or re.search(r'\bxsi:type="(?:[A-Za-z_][A-Za-z0-9_.-]*:)?ExtendedProperty"', text)
+                ):
+                    adopted_leaks.append(str(path))
+        finally:
+            if progress_callback is not None:
+                progress_callback(index, total_paths, path)
     if errors:
         report.validation["xml_parse"] = "failed"
         for err in errors[:30]:
@@ -110,7 +159,6 @@ def validate_xml_tree(out_dir: Path, report: MergeReport, base_dir: Path | None 
     cfg_path = out_dir / "Configuration.xml"
     if cfg_path.exists():
         try:
-            registry = build_object_registry(out_dir)
             for typ, name in _configuration_child_refs(cfg_path):
                 if not name or typ not in TYPE_TO_DIR:
                     continue
@@ -135,10 +183,15 @@ def validate_xml_tree(out_dir: Path, report: MergeReport, base_dir: Path | None 
                     base_missing_refs.append(f"{typ}.{name}")
             except Exception as exc:
                 base_missing_refs.append(f"Configuration.xml base-reference compare failed: {exc}")
-        for path in sorted(base_dir.rglob("*")):
-            if path.is_dir():
-                continue
-            rel = normalize_rel(path.relative_to(base_dir))
+        if base_manifest is not None:
+            base_rels = sorted(base_manifest)
+        else:
+            base_rels = [
+                normalize_rel(path.relative_to(base_dir))
+                for path in sorted(base_dir.rglob("*"))
+                if path.is_file()
+            ]
+        for rel in base_rels:
             if not (out_dir / rel).exists():
                 base_missing_files.append(rel)
 
@@ -155,21 +208,45 @@ def validate_xml_tree(out_dir: Path, report: MergeReport, base_dir: Path | None 
             report.add_conflict("BASE_FILE_MISSING_IN_MERGE_RESULT", rel, rel)
     else:
         report.validation["base_files_preserved"] = "passed"
+    if skipped_unchanged_base:
+        report.diagnostics["validation_xml_skipped_unchanged_base"] = skipped_unchanged_base
 
 
-def validate_bsl_tree(out_dir: Path, report: MergeReport) -> None:
+def validate_bsl_tree(
+    out_dir: Path,
+    report: MergeReport,
+    bsl_paths: Iterable[Path] | None = None,
+    base_manifest: dict[str, FileRecord] | None = None,
+    progress_callback: Callable[[int, int, Path], None] | None = None,
+) -> None:
     bad_markers: list[str] = []
     marker_re = re.compile(r"(?im)^[ \t]*(?:&(?:ИзменениеИКонтроль|Вместо|Перед|После)\b|#(?:Вставка|КонецВставки|Удаление|КонецУдаления|Вставить|КонецВставить|Удалить|КонецУдалить)\b)")
-    for path in out_dir.rglob("*.bsl"):
-        text = path.read_text(encoding="utf-8-sig", errors="ignore")
-        if marker_re.search(text):
-            bad_markers.append(str(path))
+    paths = (
+        sorted(bsl_paths, key=lambda p: normalize_rel(p.relative_to(out_dir)).lower())
+        if bsl_paths is not None
+        else sorted(out_dir.rglob("*.bsl"), key=lambda p: normalize_rel(p.relative_to(out_dir)).lower())
+    )
+    skipped_unchanged_base = 0
+    total_paths = len(paths)
+    for index, path in enumerate(paths, 1):
+        try:
+            if _is_unchanged_base_copy(path, out_dir, base_manifest):
+                skipped_unchanged_base += 1
+                continue
+            text = path.read_text(encoding="utf-8-sig", errors="ignore")
+            if marker_re.search(text):
+                bad_markers.append(str(path))
+        finally:
+            if progress_callback is not None:
+                progress_callback(index, total_paths, path)
     if bad_markers:
         report.validation["bsl_plain_markers"] = "failed"
         for path in bad_markers[:30]:
             report.add_conflict("BSL_EXTENSION_MARKER_LEFT", path, "В plain-result осталась расширенческая аннотация или блок")
     else:
         report.validation["bsl_plain_markers"] = "passed"
+    if skipped_unchanged_base:
+        report.diagnostics["validation_bsl_skipped_unchanged_base"] = skipped_unchanged_base
 
 
 def _run(command: list[str], timeout: int = 3600) -> tuple[int, str]:

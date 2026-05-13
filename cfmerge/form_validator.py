@@ -11,6 +11,7 @@ from .xml_utils import child, children, local_name, parse_xml
 
 OPAQUE_DATAPATH_RE = re.compile(r"^\d+/[-0-9a-fA-F:]+$")
 INDEXED_HEAD_RE = re.compile(r"^(?P<head>[^.\[]+)\[\d+\](?:\.|$)")
+NUMERIC_DATAPATH_RE = re.compile(r"^\d+$")
 
 
 def _childitem_elements(root: ET.Element) -> tuple[list[str], list[str]]:
@@ -68,6 +69,8 @@ def _collect_child_item_names(root: ET.Element) -> set[str]:
 def _is_resolved_data_path(value: str, attribute_names: set[str], child_item_names: set[str]) -> bool:
     if not value:
         return True
+    if NUMERIC_DATAPATH_RE.match(value):
+        return True
     if value.startswith(("Object.", "Объект.", "ThisObject.", "РћР±СЉРµРєС‚.")):
         return True
     if OPAQUE_DATAPATH_RE.match(value):
@@ -93,6 +96,19 @@ def _duplicate_counts(values: list[str]) -> Counter[str]:
     return Counter(value for value in values if value)
 
 
+def _unresolved_data_paths(root: ET.Element) -> list[str]:
+    attribute_names = _collect_attribute_names(root)
+    child_item_names = _collect_child_item_names(root)
+    result: list[str] = []
+    for item in root.iter():
+        if not isinstance(item.tag, str) or local_name(item.tag) != "DataPath":
+            continue
+        value = (item.text or "").strip()
+        if value and not _is_resolved_data_path(value, attribute_names, child_item_names):
+            result.append(value)
+    return result
+
+
 def _new_or_increased_duplicates(result_values: list[str], base_values: list[str]) -> list[str]:
     result_counts = _duplicate_counts(result_values)
     base_counts = _duplicate_counts(base_values)
@@ -101,6 +117,12 @@ def _new_or_increased_duplicates(result_values: list[str], base_values: list[str
         for value, count in result_counts.items()
         if count > 1 and count > base_counts.get(value, 0)
     )
+
+
+def _new_or_increased_values(result_values: list[str], base_values: list[str]) -> list[str]:
+    result_counts = _duplicate_counts(result_values)
+    base_counts = _duplicate_counts(base_values)
+    return sorted(value for value, count in result_counts.items() if count > base_counts.get(value, 0))
 
 
 def validate_form_result(form_path: Path, report: MergeReport, base_form_path: Path | None = None) -> None:
@@ -113,10 +135,13 @@ def validate_form_result(form_path: Path, report: MergeReport, base_form_path: P
     names, ids = _childitem_elements(root)
     base_names: list[str] = []
     base_ids: list[str] = []
+    base_root: ET.Element | None = None
     if base_form_path is not None and base_form_path.exists():
         try:
-            base_names, base_ids = _childitem_elements(parse_xml(base_form_path).getroot())
+            base_root = parse_xml(base_form_path).getroot()
+            base_names, base_ids = _childitem_elements(base_root)
         except Exception:
+            base_root = None
             base_names, base_ids = [], []
     duplicate_names = _new_or_increased_duplicates(names, base_names)
     duplicate_ids = _new_or_increased_duplicates(ids, base_ids)
@@ -125,16 +150,9 @@ def validate_form_result(form_path: Path, report: MergeReport, base_form_path: P
     for ident in duplicate_ids[:50]:
         report.add_conflict("FORM_DUPLICATE_CHILD_ITEM_ID", str(form_path), ident)
 
-    attribute_names = _collect_attribute_names(root)
-    child_item_names = _collect_child_item_names(root)
-    for item in root.iter():
-        if not isinstance(item.tag, str) or local_name(item.tag) != "DataPath":
-            continue
-        value = (item.text or "").strip()
-        if not value:
-            continue
-        if not _is_resolved_data_path(value, attribute_names, child_item_names):
-            report.add_conflict("FORM_DATAPATH_UNRESOLVED", str(form_path), value)
+    base_unresolved = _unresolved_data_paths(base_root) if base_root is not None else []
+    for value in _new_or_increased_values(_unresolved_data_paths(root), base_unresolved):
+        report.add_conflict("FORM_DATAPATH_UNRESOLVED", str(form_path), value)
 
     text = form_path.read_text(encoding="utf-8-sig", errors="ignore")
     if "<ConditionalAppearance>" in text:

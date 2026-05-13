@@ -28,6 +28,7 @@ class BslMergeResult:
     text: str
     actions: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    warning_records: list[MergeConflict] = field(default_factory=list)
 
 
 def normalize_body(text: str) -> str:
@@ -301,15 +302,17 @@ def body_has_early_return(body: str) -> bool:
     return re.search(r"(?im)^[ \t]*Возврат\b", body) is not None
 
 
-def _apply_inline_hooks(text: str, path: str, ext_methods: list[BslMethod], event_hooks: list[EventHook]) -> tuple[str, list[str], list[str]]:
+def _apply_inline_hooks(text: str, path: str, ext_methods: list[BslMethod], event_hooks: list[EventHook]) -> tuple[str, list[str], list[str], list[MergeConflict]]:
     actions: list[str] = []
     warnings: list[str] = []
+    warning_records: list[MergeConflict] = []
     hooks = _aggregate_hooks(ext_methods, event_hooks)
     for target_name, groups in hooks.items():
         module = parse_module(text)
         target = method_by_name(module, target_name)
         if not target:
-            raise MergeConflict("TARGET_METHOD_NOT_FOUND", path, f"Не найден метод для wrapper {target_name}", target_name)
+            warning_records.append(MergeConflict("TARGET_METHOD_NOT_FOUND", path, f"Не найден метод для wrapper {target_name}", target_name))
+            continue
         if target.kind != "procedure":
             raise MergeConflict("WRAPPER_TARGET_NOT_PROCEDURE", path, f"Before/After поддержаны для процедур: {target_name}", target_name)
         for method in groups["before"] + groups["after"]:
@@ -330,7 +333,7 @@ def _apply_inline_hooks(text: str, path: str, ext_methods: list[BslMethod], even
             actions.append(f"before_inline:{target_name}")
         if after_parts:
             actions.append(f"after_inline:{target_name}")
-    return text, actions, warnings
+    return text, actions, warnings, warning_records
 
 
 def _append_plain_methods(text: str, ext_methods: list[BslMethod]) -> tuple[str, list[str]]:
@@ -370,23 +373,37 @@ def merge_bsl(base_text: str, ext_text: str, path: str, event_hooks: list[EventH
     text = base_text
     actions: list[str] = []
     warnings: list[str] = []
+    warning_records: list[MergeConflict] = []
 
     for method in ext_module.methods:
         if method.extension_annotation == "change_and_validate":
-            text, warning = apply_change_and_validate(text, path, method)
+            try:
+                text, warning = apply_change_and_validate(text, path, method)
+            except MergeConflict as exc:
+                if exc.code != "TARGET_METHOD_NOT_FOUND":
+                    raise
+                warning_records.append(exc)
+                continue
             actions.append(f"change_and_validate:{method.target_name}")
             if warning:
                 warnings.append(warning)
         elif method.extension_annotation == "instead":
-            text, method_actions = apply_instead(text, path, method)
+            try:
+                text, method_actions = apply_instead(text, path, method)
+            except MergeConflict as exc:
+                if exc.code != "TARGET_METHOD_NOT_FOUND":
+                    raise
+                warning_records.append(exc)
+                continue
             actions.extend(method_actions)
 
     before_after = [m for m in ext_module.methods if m.extension_annotation in {"before", "after"}]
-    text, hook_actions, hook_warnings = _apply_inline_hooks(text, path, before_after, event_hooks)
+    text, hook_actions, hook_warnings, hook_warning_records = _apply_inline_hooks(text, path, before_after, event_hooks)
     actions.extend(hook_actions)
     warnings.extend(hook_warnings)
+    warning_records.extend(hook_warning_records)
 
     text, append_actions = _append_plain_methods(text, ext_module.methods)
     actions.extend(append_actions)
     text = ensure_blank_line_after_method_end(text)
-    return BslMergeResult(text=text, actions=actions, warnings=warnings)
+    return BslMergeResult(text=text, actions=actions, warnings=warnings, warning_records=warning_records)

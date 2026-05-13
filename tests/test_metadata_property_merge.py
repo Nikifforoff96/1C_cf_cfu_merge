@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import xml.etree.ElementTree as ET
@@ -6,14 +6,16 @@ from pathlib import Path
 
 import pytest
 
+from cfmerge.role_rights_merge import copy_role_rights, merge_role_rights
 from cfmerge.merge_engine import merge
-from cfmerge.models import MergeConfig
+from cfmerge.metadata_merge import merge_metadata_object, metadata_root_object
+from cfmerge.models import MergeConfig, MergeReport
 from cfmerge.scanner import scan_tree
 from cfmerge.xml_utils import child, child_text, children, clone_element, local_name, parse_xml
-from cfmerge.metadata_merge import metadata_root_object
 
 
 MD = "http://v8.1c.ru/8.3/MDClasses"
+ROLES = "http://v8.1c.ru/8.2/roles"
 
 
 def _write(path: Path, text: str) -> None:
@@ -47,6 +49,141 @@ def _common_module(name: str, uuid: str, adopted: bool = False) -> str:
 \t</CommonModule>
 </MetaDataObject>
 '''
+
+
+def _role(name: str, uuid: str, adopted: bool = False) -> str:
+    adopted_xml = "\t\t\t<ObjectBelonging>Adopted</ObjectBelonging>\n" if adopted else ""
+    extended_xml = "\t\t\t<ExtendedConfigurationObject>base-role</ExtendedConfigurationObject>\n" if adopted else ""
+    return f'''<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="{MD}">
+\t<Role uuid="{uuid}">
+\t\t<Properties>
+\t\t\t<Name>{name}</Name>
+{adopted_xml}{extended_xml}\t\t</Properties>
+\t</Role>
+</MetaDataObject>
+'''
+
+
+def _rights(body: str, *, set_for_attributes: str = "true") -> str:
+    return f'''<?xml version="1.0" encoding="UTF-8"?>
+<Rights xmlns="{ROLES}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="Rights" version="2.20">
+\t<setForNewObjects>false</setForNewObjects>
+\t<setForAttributesByDefault>{set_for_attributes}</setForAttributesByDefault>
+\t<independentRightsOfChildObjects>false</independentRightsOfChildObjects>
+{body}</Rights>
+'''
+
+
+def _rights_object_xml(name: str, body: str) -> str:
+    return f'''\t<object>
+\t\t<name>{name}</name>
+{body}\t</object>
+'''
+
+
+def _right(name: str, value: str = "true") -> str:
+    return f'''\t\t<right>
+\t\t\t<name>{name}</name>
+\t\t\t<value>{value}</value>
+\t\t</right>
+'''
+
+
+def _catalog_metadata(name: str, uuid: str, child_objects: str, adopted: bool = False) -> str:
+    adopted_xml = "\t\t\t<ObjectBelonging>Adopted</ObjectBelonging>\n" if adopted else ""
+    extended_xml = "\t\t\t<ExtendedConfigurationObject>base-catalog</ExtendedConfigurationObject>\n" if adopted else ""
+    return f'''<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="{MD}" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:xr="http://v8.1c.ru/8.3/xr" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+\t<Catalog uuid="{uuid}">
+\t\t<Properties>
+\t\t\t<Name>{name}</Name>
+{adopted_xml}{extended_xml}\t\t</Properties>
+\t\t<ChildObjects>
+{child_objects}\t\t</ChildObjects>
+\t</Catalog>
+</MetaDataObject>
+'''
+
+
+def _attribute(name: str, uuid: str, type_xml: str, adopted: bool = False) -> str:
+    adopted_xml = "\t\t\t\t<ObjectBelonging>Adopted</ObjectBelonging>\n" if adopted else ""
+    extended_xml = "\t\t\t\t<ExtendedConfigurationObject>base-attribute</ExtendedConfigurationObject>\n" if adopted else ""
+    return f'''\t\t\t<Attribute uuid="{uuid}">
+\t\t\t\t<Properties>
+\t\t\t\t\t<Name>{name}</Name>
+{adopted_xml}{extended_xml}\t\t\t\t\t{type_xml}
+\t\t\t\t</Properties>
+\t\t\t</Attribute>
+'''
+
+
+def _base_type() -> str:
+    return "<Type><v8:Type>xs:string</v8:Type></Type>"
+
+
+def _extended_type() -> str:
+    return '''<Type xsi:type="xr:ExtendedProperty">
+\t\t\t\t\t\t<xr:CheckValue>
+\t\t\t\t\t\t\t<v8:Type>xs:string</v8:Type>
+\t\t\t\t\t\t\t<StringQualifiers><Length>25</Length></StringQualifiers>
+\t\t\t\t\t\t</xr:CheckValue>
+\t\t\t\t\t\t<xr:ExtendValue>
+\t\t\t\t\t\t\t<v8:Type>xs:string</v8:Type>
+\t\t\t\t\t\t\t<v8:Type>xs:dateTime</v8:Type>
+\t\t\t\t\t\t\t<StringQualifiers><Length>50</Length></StringQualifiers>
+\t\t\t\t\t\t\t<DateQualifiers><DateFractions>Date</DateFractions></DateQualifiers>
+\t\t\t\t\t\t</xr:ExtendValue>
+\t\t\t\t\t</Type>'''
+
+
+def _merge_catalog_metadata(tmp_path: Path) -> tuple[Path, Path, Path, dict]:
+    base_dir = tmp_path / "base"
+    ext_dir = tmp_path / "ext"
+    out_dir = tmp_path / "out"
+    base = base_dir / "Catalogs" / "Items.xml"
+    ext = ext_dir / "Catalogs" / "Items.xml"
+    out = out_dir / "Catalogs" / "Items.xml"
+    report_path = tmp_path / "report.json"
+    report = MergeReport()
+    _write(base, _catalog_metadata("Items", "base-catalog", _attribute("Existing", "base-attribute", _base_type())))
+    _write(
+        ext,
+        _catalog_metadata(
+            "Items",
+            "ext-catalog",
+            _attribute("Existing", "ext-attribute", _extended_type(), adopted=True)
+            + _attribute("Added", "new-attribute", _base_type()),
+            adopted=True,
+        ),
+    )
+
+    merge_metadata_object(base, ext, out, "Catalogs/Items.xml", report)
+    report_path.write_text(json.dumps({"metadata_merge": report.metadata_merge}, ensure_ascii=False), encoding="utf-8-sig")
+    return base_dir, ext, out_dir, json.loads(report_path.read_text(encoding="utf-8-sig"))
+
+
+def _make_rights_merge_tree(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
+    cf = tmp_path / "cf"
+    cfu = tmp_path / "cfu"
+    out = tmp_path / "out"
+    report_path = tmp_path / "report.json"
+    _write(cf / "Configuration.xml", _config("Base", "\t\t\t<Role>Partial</Role>\n"))
+    _write(cfu / "Configuration.xml", _config("Ext", "\t\t\t<Role>Partial</Role>\n\t\t\t<Role>ExtRole</Role>\n"))
+    _write(cf / "Roles" / "Partial.xml", _role("Partial", "base-role"))
+    _write(cfu / "Roles" / "Partial.xml", _role("Partial", "ext-role", adopted=True))
+    _write(cfu / "Roles" / "ExtRole.xml", _role("ExtRole", "native-role"))
+    _write(cf / "Roles" / "Partial" / "Ext" / "Rights.xml", _rights(_rights_object_xml("Catalog.Base", _right("Read", "true"))))
+    _write(
+        cfu / "Roles" / "Partial" / "Ext" / "Rights.xml",
+        _rights(
+            _rights_object_xml("Catalog.Base", _right("Delete", "true"))
+            + _rights_object_xml("Catalog.Extension", _right("Read", "true")),
+            set_for_attributes="false",
+        ),
+    )
+    _write(cfu / "Roles" / "ExtRole" / "Ext" / "Rights.xml", _rights(_rights_object_xml("Configuration.Ext", _right("MainWindowModeNormal"))))
+    return cf, cfu, out, report_path
 
 
 def _defined_type(name: str, uuid: str, type_xml: str, adopted: bool = False) -> str:
@@ -167,8 +304,8 @@ def test_empty_extension_register_records_do_not_remove_base(small_merge: tuple[
     )
 
 
-def test_existing_child_object_property_is_applied(small_merge: tuple[Path, Path, Path, dict]) -> None:
-    cf, _, out, report = small_merge
+def test_existing_child_object_property_is_applied(tmp_path: Path) -> None:
+    cf, _, out, report = _merge_catalog_metadata(tmp_path)
     action = next(
         item for item in report["metadata_merge"]
         if item["action"] == "property_replaced" and item["property_path"] == "Type" and "/Attribute." in item["object_path"]
@@ -182,7 +319,6 @@ def test_existing_child_object_property_is_applied(small_merge: tuple[Path, Path
     assert b"StringQualifiers" in result
     assert b"DateQualifiers" in result
     assert "readable_extended_property_unwrapped" in action["reason"]
-
 
 def test_empty_adopted_type_does_not_clear_base_type(tmp_path: Path) -> None:
     cf = tmp_path / "cf"
@@ -244,11 +380,11 @@ def test_plain_adopted_type_does_not_replace_base_type(tmp_path: Path) -> None:
     )
 
 
-def test_native_child_object_is_added_without_duplicates(small_merge: tuple[Path, Path, Path, dict]) -> None:
-    _, _, out, report = small_merge
+def test_native_child_object_is_added_without_duplicates(tmp_path: Path) -> None:
+    _, _, out, report = _merge_catalog_metadata(tmp_path)
     action = next(
         item for item in report["metadata_merge"]
-        if item["action"] == "child_object_added" and item["source_path"] != "Configuration.xml" and "/EnumValue." in item["object_path"]
+        if item["action"] == "child_object_added" and item["source_path"] != "Configuration.xml" and "/Attribute." in item["object_path"]
     )
     root = _object(out / action["source_path"])
     child_type, child_name = action["object_path"].split("/")[-1].split(".", 1)
@@ -259,9 +395,8 @@ def test_native_child_object_is_added_without_duplicates(small_merge: tuple[Path
 
     assert len(matches) == 1
 
-
-def test_existing_child_object_is_not_replaced_by_extension_wrapper(small_merge: tuple[Path, Path, Path, dict]) -> None:
-    _, _, out, report = small_merge
+def test_existing_child_object_is_not_replaced_by_extension_wrapper(tmp_path: Path) -> None:
+    _, _, out, report = _merge_catalog_metadata(tmp_path)
     action = next(
         item for item in report["metadata_merge"]
         if item["action"] == "child_object_merged" and "/Attribute." in item["object_path"]
@@ -271,7 +406,6 @@ def test_existing_child_object_is_not_replaced_by_extension_wrapper(small_merge:
 
     assert "<ObjectBelonging>Adopted</ObjectBelonging>" not in text
     assert "ExtendedConfigurationObject" not in text
-
 
 def test_extension_technical_properties_do_not_leak(small_merge: tuple[Path, Path, Path, dict]) -> None:
     _, _, out, _ = small_merge
@@ -288,14 +422,14 @@ def test_extension_technical_properties_do_not_leak(small_merge: tuple[Path, Pat
         assert not any(marker in text for marker in forbidden), path
 
 
-def test_rights_xml_is_not_classified_as_metadata_object(small_merge: tuple[Path, Path, Path, dict]) -> None:
-    project = Path(__file__).resolve().parents[1]
-    manifest = scan_tree(project / "examples" / "small" / "cfu")
+def test_rights_xml_is_not_classified_as_metadata_object(tmp_path: Path) -> None:
+    cfu = tmp_path / "cfu"
+    _write(cfu / "Roles" / "Partial" / "Ext" / "Rights.xml", _rights(""))
+    manifest = scan_tree(cfu)
     rights = [record for rel, record in manifest.items() if rel.endswith("/Ext/Rights.xml")]
 
     assert rights
     assert {record.kind for record in rights} == {"rights_xml"}
-
 
 def test_unknown_xml_does_not_overwrite_existing_base_resource(tmp_path: Path) -> None:
     cf = tmp_path / "cf"
@@ -314,33 +448,40 @@ def test_unknown_xml_does_not_overwrite_existing_base_resource(tmp_path: Path) -
     assert any(item["action"] == "unsupported_resource_xml" for item in report.metadata_merge)
 
 
-def test_adopted_role_rights_xml_is_merged_semantically(small_merge: tuple[Path, Path, Path, dict]) -> None:
-    cf, _, out, report = small_merge
-    rel = "Roles/ЧастичныеПрава/Ext/Rights.xml"
-    root = _rights_root(out / rel)
-    text = (out / rel).read_text(encoding="utf-8-sig")
-
-    assert (out / rel).read_bytes() != (cf / rel).read_bytes()
-    assert not any(
-        item["action"] == "unsupported_resource_xml" and item["source_path"] == rel
-        for item in report["metadata_merge"]
+def test_adopted_role_rights_xml_is_merged_semantically(tmp_path: Path) -> None:
+    base = tmp_path / "base.xml"
+    ext = tmp_path / "ext.xml"
+    out = tmp_path / "out.xml"
+    rel = "Roles/Partial/Ext/Rights.xml"
+    _write(base, _rights(_rights_object_xml("Catalog.Base", _right("Read", "true"))))
+    _write(
+        ext,
+        _rights(
+            _rights_object_xml("Catalog.Base", _right("Delete", "true"))
+            + _rights_object_xml("Catalog.Extension", _right("Read", "true")),
+            set_for_attributes="false",
+        ),
     )
-    assert _right_value(root, "InformationRegister.РегистрСведений1", "Read") == "true"
-    assert _right_value(root, "Catalog.ТестСправочник", "Delete") == "true"
-    assert _right_value(root, "Catalog.омСправочникРасширения", "Read") == "true"
-    assert _right_value(root, "Catalog.ВторойСправочник", "Read") == "true"
+    report = MergeReport()
+    merge_role_rights(base, ext, out, rel, report, "Base", "Ext")
+    root = _rights_root(out)
+    text = out.read_text(encoding="utf-8-sig")
+
+    assert out.read_bytes() != base.read_bytes()
+    assert not any(item["action"] == "unsupported_resource_xml" for item in report.metadata_merge)
+    assert _right_value(root, "Catalog.Base", "Read") == "true"
+    assert _right_value(root, "Catalog.Base", "Delete") == "true"
+    assert _right_value(root, "Catalog.Extension", "Read") == "true"
     assert child_text(root, ["setForAttributesByDefault"]) == "false"
-    assert "Configuration.РасширениеТекст" not in text
-    assert any(item["action"] == "rights_object_added" for item in report["metadata_merge"])
-    assert any(item["action"] == "role_rights_flag_replaced" for item in report["metadata_merge"])
+    assert "Configuration.Ext" not in text
+    assert any(item["action"] == "rights_object_added" for item in report.metadata_merge)
+    assert any(item["action"] == "role_rights_flag_replaced" for item in report.metadata_merge)
 
-
-def test_report_contains_metadata_property_changes(small_merge: tuple[Path, Path, Path, dict]) -> None:
-    _, _, _, report = small_merge
+def test_report_contains_metadata_property_changes(tmp_path: Path) -> None:
+    _, _, _, report = _merge_catalog_metadata(tmp_path)
 
     assert any(item["action"] == "property_replaced" for item in report["metadata_merge"])
     assert any(item["action"] == "child_object_merged" for item in report["metadata_merge"])
-
 
 def test_config_dump_info_does_not_include_extension_root_configuration(small_merge: tuple[Path, Path, Path, dict]) -> None:
     _, _, out, _ = small_merge
@@ -350,27 +491,31 @@ def test_config_dump_info_does_not_include_extension_root_configuration(small_me
     assert "Configuration.РасширениеТекст" not in text
 
 
-def test_native_role_rights_are_rebased_to_base_configuration(small_merge: tuple[Path, Path, Path, dict]) -> None:
-    _, _, out, report = small_merge
-    text = (out / "Roles" / "омРольРасширения" / "Ext" / "Rights.xml").read_text(encoding="utf-8-sig")
+def test_native_role_rights_are_rebased_to_base_configuration(tmp_path: Path) -> None:
+    src = tmp_path / "src.xml"
+    out = tmp_path / "out.xml"
+    _write(src, _rights(_rights_object_xml("Configuration.Ext", _right("MainWindowModeNormal"))))
+    report = MergeReport()
+    copy_role_rights(src, out, "Roles/ExtRole/Ext/Rights.xml", report, "Base", "Ext")
+    text = out.read_text(encoding="utf-8-sig")
 
-    assert "Configuration.ОсновнаяКонфигурацияТест" in text
-    assert "Configuration.РасширениеТекст" not in text
+    assert "Configuration.Base" in text
+    assert "Configuration.Ext" not in text
     assert any(
         item["action"] == "rights_xml_rebased" and item["reason"] == "rights_xml_configuration_reference_rebased"
-        for item in report["metadata_merge"]
+        for item in report.metadata_merge
     )
 
-
-def test_second_merge_does_not_duplicate_child_objects(tmp_path: Path, small_merge: tuple[Path, Path, Path, dict]) -> None:
-    _, cfu, first_out, report = small_merge
-    second_out = tmp_path / "second"
-    merge(MergeConfig(cf_dir=first_out, cfu_dir=cfu, out_dir=second_out, force=True))
+def test_second_merge_does_not_duplicate_child_objects(tmp_path: Path) -> None:
+    _, ext, first_out, report = _merge_catalog_metadata(tmp_path)
+    second_out = tmp_path / "second.xml"
+    second_report = MergeReport()
+    merge_metadata_object(first_out / "Catalogs" / "Items.xml", ext, second_out, "Catalogs/Items.xml", second_report)
     action = next(
         item for item in report["metadata_merge"]
-        if item["action"] == "child_object_added" and item["source_path"] != "Configuration.xml" and "/EnumValue." in item["object_path"]
+        if item["action"] == "child_object_added" and item["source_path"] != "Configuration.xml" and "/Attribute." in item["object_path"]
     )
-    root = _object(second_out / action["source_path"])
+    root = _object(second_out)
     child_type, child_name = action["object_path"].split("/")[-1].split(".", 1)
     matches = [
         item for item in children(child(root, "ChildObjects"))
@@ -379,23 +524,13 @@ def test_second_merge_does_not_duplicate_child_objects(tmp_path: Path, small_mer
 
     assert len(matches) == 1
 
-    rights_root = _rights_root(second_out / "Roles" / "ЧастичныеПрава" / "Ext" / "Rights.xml")
-    object_names = [child_text(item, ["name"]) for item in children(rights_root, "object")]
-    assert len(object_names) == len(set(object_names))
-    for rights_object in children(rights_root, "object"):
-        right_names = [child_text(item, ["name"]) for item in children(rights_object, "right")]
-        assert len(right_names) == len(set(right_names))
-
-
 def test_rights_changes_are_written_to_json_and_human_report(tmp_path: Path) -> None:
-    project = Path(__file__).resolve().parents[1]
-    out = tmp_path / "merge_cf"
-    report_path = tmp_path / "merge-report.json"
+    cf, cfu, out, report_path = _make_rights_merge_tree(tmp_path)
     human_path = tmp_path / "merge-report.txt"
 
     merge(MergeConfig(
-        cf_dir=project / "examples" / "small" / "cf",
-        cfu_dir=project / "examples" / "small" / "cfu",
+        cf_dir=cf,
+        cfu_dir=cfu,
         out_dir=out,
         report_path=report_path,
         human_report_path=human_path,

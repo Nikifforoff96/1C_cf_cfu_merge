@@ -76,4 +76,10 @@ def write_human_report(report: MergeReport, path: Path) -> None:
         lines.append("Валидация:")
         for key, value in report.validation.items():
             lines.append(f"- {key}: {value}")
+    timings = report.diagnostics.get("timings")
+    if isinstance(timings, dict) and timings:
+        lines.append("")
+        lines.append("Timings:")
+        for key, value in timings.items():
+            lines.append(f"- {key}: {value}s")
     write_text(path, "\n".join(lines) + "\n", encoding="utf-8-sig", newline="lf")

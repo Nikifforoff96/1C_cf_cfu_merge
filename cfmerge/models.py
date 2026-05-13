@@ -1,8 +1,28 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from .io_utils import detect_encoding_and_newline, sha256_file
+
+
+@dataclass(frozen=True, slots=True)
+class ProgressEvent:
+    time: str
+    level: str
+    stage: str
+    message: str
+    path: str | None = None
+    phase_key: str | None = None
+    phase_title: str | None = None
+    event_type: str | None = None
+    current: int | None = None
+    total: int | None = None
+    unit: str | None = None
+    phase_percent: float | None = None
+    overall_percent: float | None = None
 
 
 @dataclass(slots=True)
@@ -27,6 +47,7 @@ class MergeConfig:
     verbose: bool = False
     unsafe_text_merge: bool = False
     fail_on_conflict: bool = False
+    progress_callback: Callable[[ProgressEvent], None] | None = None
 
 
 @dataclass(slots=True)
@@ -34,11 +55,32 @@ class FileRecord:
     rel_path: str
     abs_path: Path
     kind: str
-    encoding: str
-    newline: str
-    sha256: str
+    size: int
+    mtime_ns: int
     object_type: str | None = None
     object_name: str | None = None
+    object_ref: Any | None = None
+    _encoding: str | None = None
+    _newline: str | None = None
+    _sha256: str | None = None
+
+    @property
+    def encoding(self) -> str:
+        if self._encoding is None:
+            self._encoding, self._newline = detect_encoding_and_newline(self.abs_path)
+        return self._encoding
+
+    @property
+    def newline(self) -> str:
+        if self._newline is None:
+            self._encoding, self._newline = detect_encoding_and_newline(self.abs_path)
+        return self._newline
+
+    @property
+    def sha256(self) -> str:
+        if self._sha256 is None:
+            self._sha256 = sha256_file(self.abs_path)
+        return self._sha256
 
 
 @dataclass(slots=True)

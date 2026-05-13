@@ -31,8 +31,12 @@ def classify_path(rel_path: str) -> str:
         return "bsl_module"
     if rel.endswith("/Ext/Form.xml"):
         return "form_visual_xml"
+    if rel.endswith("/Ext/CommandInterface.xml"):
+        return "command_interface_xml"
     if rel.endswith("/Ext/Rights.xml"):
         return "rights_xml"
+    if "/Ext/" in rel and name.endswith(".xml"):
+        return "unknown_xml"
     if "/Forms/" in rel and name.endswith(".xml"):
         return "form_object_xml"
     if name.endswith(".xml"):
@@ -40,18 +44,7 @@ def classify_path(rel_path: str) -> str:
     return "binary_or_resource"
 
 
-def classify_file(path: Path, rel_path: str) -> str:
-    coarse = classify_path(rel_path)
-    if not rel_path.lower().endswith(".xml"):
-        return coarse
-    if coarse in {"root_configuration", "config_dump_info", "form_visual_xml", "rights_xml"}:
-        return coarse
-
-    try:
-        root = ET.parse(path).getroot()
-    except Exception:
-        return "unknown_xml"
-
+def classify_xml_root(root: ET.Element, coarse: str) -> str:
     root_local = _local_name(root.tag)
     root_ns = _namespace(root.tag)
     if root_local == "MetaDataObject" and root_ns == NS_MD:
@@ -61,9 +54,26 @@ def classify_file(path: Path, rel_path: str) -> str:
         return "unknown_xml"
     if root_local == "Form" and root_ns == NS_LF:
         return "form_visual_xml"
+    if root_local == "CommandInterface":
+        return "command_interface_xml"
     if root_local == "Rights" and root_ns == NS_ROLES:
         return "rights_xml"
     return "unknown_xml"
+
+
+def classify_file(path: Path, rel_path: str) -> str:
+    coarse = classify_path(rel_path)
+    if not rel_path.lower().endswith(".xml"):
+        return coarse
+    if coarse in {"root_configuration", "config_dump_info", "form_visual_xml", "rights_xml", "unknown_xml"}:
+        return coarse
+
+    try:
+        root = ET.parse(path).getroot()
+    except Exception:
+        return "unknown_xml"
+
+    return classify_xml_root(root, coarse)
 
 
 DIR_TO_TYPE = {

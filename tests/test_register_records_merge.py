@@ -101,9 +101,23 @@ def test_duplicate_register_record_keys_are_reported(tmp_path: Path) -> None:
     assert "duplicate_extension_register_record:AccumulationRegister.Extension" in reasons
 
 
-def test_empty_adopted_register_records_are_not_unsafe_conflicts(tmp_path: Path) -> None:
-    out, report = _merge(tmp_path, ["AccumulationRegister.Base"], [])
+def test_public_example_empty_register_records_are_not_unsafe_conflicts(tmp_path: Path) -> None:
+    project = Path(__file__).resolve().parents[1]
+    checked = [
+        "Documents/Документ1.xml",
+    ]
 
-    assert _records(out) == ["AccumulationRegister.Base"]
-    assert not any(item["reason"] == "unsafe_linkage_property_not_merged" for item in report.metadata_merge)
-    assert not any(w.code == "METADATA_PROPERTY_REQUIRES_SPECIAL_MERGE" for w in report.warnings)
+    for rel in checked:
+        report = MergeReport()
+        out = tmp_path / rel.replace("/", "_")
+        merge_metadata_object(
+            project / "examples" / "small" / "cf" / rel,
+            project / "examples" / "small" / "cfu" / rel,
+            out,
+            rel,
+            report,
+        )
+
+        assert _records(out) == ["AccumulationRegister.РегистрНакопления1"]
+        assert not any(item["reason"] == "unsafe_linkage_property_not_merged" for item in report.metadata_merge)
+        assert not any(w.code == "METADATA_PROPERTY_REQUIRES_SPECIAL_MERGE" for w in report.warnings)

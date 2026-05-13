@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from shutil import copy2
 from pathlib import Path
 
 import pytest
@@ -8,10 +9,13 @@ import pytest
 from cfmerge.bsl_merge import merge_bsl
 from cfmerge.config_dump_info import regenerate_config_dump_info
 from cfmerge.conflicts import MergeConflict
+from cfmerge.external_command_interface import copy_command_interface_resource
 from cfmerge.form_merge import merge_form_visual
 from cfmerge.merge_engine import merge
 from cfmerge.metadata_merge import merge_configuration
 from cfmerge.models import MergeConfig, MergeReport
+from cfmerge.object_registry import build_object_registry, build_object_registry_from_records
+from cfmerge.scanner import scan_tree
 from cfmerge.validators import validate_bsl_tree, validate_xml_tree
 
 
@@ -73,6 +77,26 @@ def _data_processor(name: str, uuid: str) -> str:
 \t\t\t<Name>{name}</Name>
 \t\t</Properties>
 \t</DataProcessor>
+</MetaDataObject>
+'''
+
+
+def _catalog(name: str, uuid: str, *, use_standard_commands: bool = True, commands: list[str] | None = None) -> str:
+    commands = commands or []
+    child_objects = ""
+    if commands:
+        child_objects = "\t\t<ChildObjects>\n" + "".join(
+            f'\t\t\t<Command uuid="{uuid}-{idx}"><Properties><Name>{command}</Name></Properties></Command>\n'
+            for idx, command in enumerate(commands, start=1)
+        ) + "\t\t</ChildObjects>\n"
+    return f'''<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="{MD}">
+\t<Catalog uuid="{uuid}">
+\t\t<Properties>
+\t\t\t<Name>{name}</Name>
+\t\t\t<UseStandardCommands>{str(use_standard_commands).lower()}</UseStandardCommands>
+\t\t</Properties>
+{child_objects}\t</Catalog>
 </MetaDataObject>
 '''
 
@@ -243,6 +267,41 @@ def test_config_dump_info_preserves_base_ids_and_adds_native_extension_objects(t
     assert "Configuration.Русский.ManagedApplicationModule" not in text
 
 
+def test_manifest_registry_matches_disk_registry(tmp_path: Path) -> None:
+    cf = tmp_path / "cf"
+    _write(cf / "Configuration.xml", _config("Base", "\t\t\t<CommonModule>BaseModule</CommonModule>\n"))
+    _write(cf / "CommonModules" / "BaseModule.xml", _common_module("BaseModule", "base-id"))
+
+    manifest = scan_tree(cf)
+    from_manifest = build_object_registry_from_records(cf, manifest)
+    from_disk = build_object_registry(cf)
+
+    assert set(from_manifest.by_rel) == set(from_disk.by_rel)
+    assert set(from_manifest.by_type_name) == set(from_disk.by_type_name)
+    assert set(from_manifest.by_full_name) == set(from_disk.by_full_name)
+
+
+def test_config_dump_info_preserves_unchanged_base_config_version(tmp_path: Path) -> None:
+    cf = tmp_path / "cf"
+    out = tmp_path / "out"
+    _write(cf / "Configuration.xml", _config("Base", "\t\t\t<CommonModule>BaseModule</CommonModule>\n"))
+    _write(cf / "CommonModules" / "BaseModule.xml", _common_module("BaseModule", "base-id"))
+    _write(cf / "ConfigDumpInfo.xml", _dump({
+        "Configuration.Base": "cfg-base",
+        "CommonModule.BaseModule": "base-id",
+    }))
+    out.mkdir()
+    copy2(cf / "Configuration.xml", out / "Configuration.xml")
+    (out / "CommonModules").mkdir(parents=True)
+    copy2(cf / "CommonModules" / "BaseModule.xml", out / "CommonModules" / "BaseModule.xml")
+
+    report = MergeReport()
+    regenerate_config_dump_info(out, cf / "ConfigDumpInfo.xml", None, report, base_manifest=scan_tree(cf))
+    text = (out / "ConfigDumpInfo.xml").read_text(encoding="utf-8-sig")
+
+    assert 'name="CommonModule.BaseModule" id="base-id" configVersion="old"' in text
+
+
 def test_dry_run_writes_reports_and_does_not_touch_out(tmp_path: Path) -> None:
     cf = tmp_path / "cf"
     cfu = tmp_path / "cfu"
@@ -400,3 +459,93 @@ def test_validators_catch_plain_result_artifacts_without_false_string_hits(tmp_p
     assert "FORM_BASEFORM_LEFT" in codes
     assert "BSL_EXTENSION_MARKER_LEFT" in codes
     assert sum(c.code == "BSL_EXTENSION_MARKER_LEFT" for c in report.conflicts) == 1
+
+
+def test_command_interface_removes_disabled_standard_commands_and_keeps_supported_commands(tmp_path: Path) -> None:
+    out = tmp_path / "out"
+    src = tmp_path / "src.xml"
+    dst = out / "Subsystems" / "омЗагрузкаДанных" / "Ext" / "CommandInterface.xml"
+    _write(out / "Catalogs" / "ФизическиеЛица.xml", _catalog("ФизическиеЛица", "person-id", use_standard_commands=False, commands=["Расш1_ФизическиеЛица"]))
+    _write(out / "Catalogs" / "Сотрудники.xml", _catalog("Сотрудники", "employee-id", use_standard_commands=True))
+    _write(
+        src,
+        '''<?xml version="1.0" encoding="UTF-8"?>
+<CommandInterface xmlns="http://v8.1c.ru/8.3/xcf/extrnprops">
+\t<CommandsVisibility>
+\t\t<Command name="Catalog.ФизическиеЛица.StandardCommand.OpenList" />
+\t\t<Command name="Catalog.Сотрудники.StandardCommand.OpenList" />
+\t</CommandsVisibility>
+\t<CommandsOrder>
+\t\t<Command name="Catalog.ФизическиеЛица.Command.Расш1_ФизическиеЛица" />
+\t\t<Command name="Catalog.ФизическиеЛица.StandardCommand.OpenList" />
+\t\t<Command name="Catalog.Сотрудники.StandardCommand.OpenList" />
+\t</CommandsOrder>
+</CommandInterface>
+''',
+    )
+    report = MergeReport()
+
+    strategy = copy_command_interface_resource(src, dst, "Subsystems/омЗагрузкаДанных/Ext/CommandInterface.xml", report)
+
+    text = dst.read_text(encoding="utf-8-sig")
+    assert strategy == "copy_command_interface_filtered"
+    assert "Catalog.ФизическиеЛица.StandardCommand.OpenList" not in text
+    assert "Catalog.ФизическиеЛица.Command.Расш1_ФизическиеЛица" in text
+    assert "Catalog.Сотрудники.StandardCommand.OpenList" in text
+    assert any(item["action"] == "command_interface_command_removed" for item in report.metadata_merge)
+
+
+def test_command_interface_validator_reports_broken_references(tmp_path: Path) -> None:
+    out = tmp_path / "out"
+    _write(out / "Configuration.xml", _config("Base", "\t\t\t<Catalog>ФизическиеЛица</Catalog>\n"))
+    _write(out / "Catalogs" / "ФизическиеЛица.xml", _catalog("ФизическиеЛица", "person-id", use_standard_commands=False))
+    _write(
+        out / "Subsystems" / "Кадры" / "Ext" / "CommandInterface.xml",
+        '''<?xml version="1.0" encoding="UTF-8"?>
+<CommandInterface xmlns="http://v8.1c.ru/8.3/xcf/extrnprops">
+\t<CommandsOrder>
+\t\t<Command name="Catalog.ФизическиеЛица.StandardCommand.OpenList" />
+\t\t<Command name="Catalog.ФизическиеЛица.Command.Несуществующая" />
+\t</CommandsOrder>
+</CommandInterface>
+''',
+    )
+    report = MergeReport()
+
+    validate_xml_tree(out, report)
+
+    codes = {item.code for item in report.conflicts}
+    assert "COMMAND_INTERFACE_STANDARD_COMMAND_DISABLED" in codes
+    assert "COMMAND_INTERFACE_COMMAND_NOT_FOUND" in codes
+
+
+def test_target_method_not_found_is_warning_and_merge_continues(tmp_path: Path) -> None:
+    cf = tmp_path / "cf"
+    cfu = tmp_path / "cfu"
+    out = tmp_path / "out"
+    _write(cf / "Configuration.xml", _config("Base", "\t\t\t<CommonModule>Модуль</CommonModule>\n"))
+    _write(cf / "CommonModules" / "Модуль.xml", _common_module("Модуль", "base-id"))
+    _write(cf / "CommonModules" / "Модуль" / "Ext" / "Module.bsl", "Процедура Существующая()\n\tБаза();\nКонецПроцедуры\n")
+    _write(cfu / "Configuration.xml", _config("Ext", "\t\t\t<CommonModule>Модуль</CommonModule>\n"))
+    _write(cfu / "CommonModules" / "Модуль.xml", _common_module("Модуль", "ext-id", adopted=True))
+    _write(
+        cfu / "CommonModules" / "Модуль" / "Ext" / "Module.bsl",
+        '&Вместо("НетТакогоМетода")\n'
+        'Процедура Расш1_НетТакогоМетода()\n'
+        '\tНеДолжноПопастьВРезультат();\n'
+        'КонецПроцедуры\n'
+        '\n'
+        '&После("Существующая")\n'
+        'Процедура Расш1_Существующая()\n'
+        '\tПосле();\n'
+        'КонецПроцедуры\n',
+    )
+
+    report = merge(MergeConfig(cf_dir=cf, cfu_dir=cfu, out_dir=out, force=True))
+
+    text = (out / "CommonModules" / "Модуль" / "Ext" / "Module.bsl").read_text(encoding="utf-8-sig")
+    assert report.status == "completed_with_warnings"
+    assert not report.conflicts
+    assert any(item.code == "TARGET_METHOD_NOT_FOUND" for item in report.warnings)
+    assert "НеДолжноПопастьВРезультат" not in text
+    assert "После();" in text

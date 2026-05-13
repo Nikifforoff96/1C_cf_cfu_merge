@@ -17,7 +17,6 @@ Srvr="<server-host>";Ref="<infobase-ref>"
 ```
 
 If the test infobase requires authentication, pass `-UserName` and optionally `-Password`.
-If the password is empty, do not pass `-Password`.
 
 Default platform:
 
@@ -58,14 +57,14 @@ powershell.exe -NoProfile -File ".\tools\1c-db-ops\scripts\db-dump-cf.ps1" `
   -OutputFile "<output_cf_path>"
 ```
 
-Server example:
+Server infobase example:
 
 ```powershell
 powershell.exe -NoProfile -File ".\tools\1c-db-ops\scripts\db-load-xml.ps1" `
   -V8Path "C:\Program Files\1cv8\8.3.27.1644\bin" `
   -InfoBaseServer "<server-host>" `
   -InfoBaseRef "<infobase-ref>" `
-  -UserName "<user-name>" `
+  -UserName "Администратор" `
   -ConfigDir "<config_dump_dir>" `
   -Mode Full
 ```

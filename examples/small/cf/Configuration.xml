@@ -245,18 +245,14 @@
 			<SynchronousPlatformExtensionAndAddInCallUseMode>DontUse</SynchronousPlatformExtensionAndAddInCallUseMode>
 			<InterfaceCompatibilityMode>Taxi</InterfaceCompatibilityMode>
 			<DatabaseTablespacesUseMode>DontUse</DatabaseTablespacesUseMode>
-			<CompatibilityMode>Version8_3_21</CompatibilityMode>
+			<CompatibilityMode>Version8_3_27</CompatibilityMode>
 			<DefaultConstantsForm/>
 		</Properties>
 		<ChildObjects>
 			<Language>Русский</Language>
-			<Role>ПолныеПрава</Role>
-			<Role>ЧастичныеПрава</Role>
 			<CommonModule>ОбщийМодуль1</CommonModule>
 			<Catalog>ТестСправочник</Catalog>
-			<Catalog>ВторойСправочник</Catalog>
 			<Document>Документ1</Document>
-			<Enum>Перечисление1</Enum>
 			<DataProcessor>Обработка1</DataProcessor>
 			<InformationRegister>РегистрСведений1</InformationRegister>
 			<AccumulationRegister>РегистрНакопления1</AccumulationRegister>
